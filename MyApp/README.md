@@ -45,14 +45,21 @@ ocient.db.row_count=500
 ocient.db.dashboardTableQuery=select query with two columns one can be any count
 
 **Use the report field to declare the name of the report ending with _report. sample values are provided**
+
 report=Auction_report,Frequency_report
+
 **Use the same ReportName with _column, _tablename, _timecolumn fields**
 
 **Use the same ReportName with _column: values must be comma seperated without any quotes. sample values are provided**
+
 Auction_report_column=created,auctionid,auctionresult
+
 **Use the same ReportName with _tablename: value must be the table name of respective report needed**
+
 Auction_report_tablename=auction_details
+
 **Use the same ReportName with _timecolumn: value must be the time column of respective report needed**
+
 Auction_report_timecolumn=created
 
 
