@@ -1,0 +1,55 @@
+:root {
+    --background-color: #f8f9fa; /* Default light mode background color */
+    --text-color: #343a40; /* Default light mode text color */
+  }
+  
+  /* Dark mode styles */
+  body.dark-mode {
+    --background-color: #41464b; /* Dark mode background color */
+    --text-color: #000000; /* Dark mode text color (white) */
+  }
+  
+  /* Use the variables for styling */
+  body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+  }
+  
+  /* Apply white text color to all tags in dark mode */
+  body.dark-mode * {
+    color: #ffffff; /* White text color */
+  }
+table th tr td{
+    background-color: var(--background-color);
+    color: black;
+}  
+.dark-mode-toggle {
+    appearance: none;
+    width: 50px;
+    height: 30px;
+    border-radius: 15px;
+    background-color: #ccc;
+    position: relative;
+    cursor: pointer;
+  }
+  
+  .dark-mode-toggle:before {
+    content: '';
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background-color: #fff;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s;
+  }
+  
+  input:checked + .dark-mode-toggle:before {
+    transform: translateX(20px);
+  }
+  
+  input {
+    display: none;
+  }
+  

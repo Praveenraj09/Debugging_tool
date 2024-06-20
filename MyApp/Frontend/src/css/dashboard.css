@@ -1,0 +1,86 @@
+.container-fluid {
+    margin-top: 10px;
+  }
+  
+  .card {
+    padding-top: 20px;
+    background-color: #f2f4f6; /* Light gray */
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    font-family:'Times New Roman', Times, serif;
+    color:rgb(0, 0, 0);
+  }
+  
+  .card-content {
+    padding: 20px;
+  }
+  
+  .card-title {
+    font-size: 1.25rem;
+    margin-bottom: 10px;
+  }
+  
+  .card-header {
+    font-size: 1rem;
+    color: #ffffff; /* Dark gray */
+    background-image: url('../img/ocient_cover.jpeg');
+    margin-top: -20px;
+    display: flex;
+    align-items: center;
+    background-repeat: no-repeat;
+    height: 50px;
+    padding-left: 20px; 
+  }
+  
+  
+  .card-text {
+    margin-top: 10px;
+  }
+  
+  .list-item {
+    padding: 5px 0;
+  }
+  
+  .illustration-image {
+    max-width: 100%;
+    height: auto;
+    margin-top: 20px;
+  }
+  
+  .footer {
+    margin-top: 20px;
+    background-color: #343a40; /* Dark gray */
+    color: #fff;
+    text-align: center;
+    padding: 10px 0;
+  }
+  
+  .logout-modal {
+    background-color: rgba(0, 0, 0, 0.5);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .modal-content {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 5px;
+  }
+  
+  .modal-title {
+    margin-bottom: 10px;
+  }
+  
+  .modal-text {
+    margin-top: 10px;
+  }
+  .body1{
+    margin-top: 5px;
+  }
+  

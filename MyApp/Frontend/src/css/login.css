@@ -1,0 +1,70 @@
+body {
+  background-image: url(../img/bgimage.jpg);
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  /* Blend mode for the background image */
+}
+
+@keyframes moveRight {
+  0% {
+     transform: translateX(-100%);
+  }
+
+  100% {
+     transform: translateX(0);
+  }
+}
+
+.animate-left-to-right {
+  animation: moveRight 1s forwards;
+}
+.card1 {
+  align-self: center;
+  background-color: rgb(238, 238, 238);
+  background-blend-mode: overlay;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  color: #000000;
+  font-weight: bold;
+  background-image: url(../img/ocient_cover.jpeg);
+  margin-top: 100px;
+  text-align: center;
+  border-radius: 10px; /* Add rounded corners */
+  padding: 10px; /* Add padding for text inside */
+  height: 350px;
+}
+
+.card1 label {
+  margin-top: 10px; /* Add margin-top to the h1 inside the column */
+}
+
+
+/* Additional CSS styles for the card */
+.card1-header {
+  color: #ffffff !important;
+  background-image: url(../img/ocient_cover.jpeg);
+  font-weight: bold;
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  min-height: 80px;
+  text-align:left;
+  align-items: center;
+  display: flex;
+}
+
+.card1-body{
+  justify-content: center; /* Center horizontally */
+  align-items: center; 
+  width: 100%;
+  margin-top: 5%;
+ 
+}
+.topnav1 {
+  margin-top: 3px;
+  overflow: hidden;
+  background-color: #fdfeff00;
+  text-align: center;
+}
