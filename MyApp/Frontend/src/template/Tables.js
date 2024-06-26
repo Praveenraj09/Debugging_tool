@@ -19,10 +19,11 @@ function Tables() {
     async function fetchData() {
       const response = await axios.get('/tables');
       const data = response.data;
-      setTables(data.tables);
+      const tableNames = response.data.map(item => item.table_name);
+      console.log(tableNames)
+      setTables(tableNames);
       setLoading(false);
       
-      console.log(data);
       }
     fetchData();
   }, []);
@@ -74,11 +75,11 @@ console.log(updatedRows)
                     id="filterTable"
                     value={selectedTable}
                     onChange={handleTableChange}
-                    required
+                    
                   >
                     { tables.map((table,index) => (
-                      <MenuItem key={index} value={table[2]}>
-                        {table[2]}
+                      <MenuItem key={index} value={table}>
+                        {table}
                       </MenuItem>
                     ))}
                   </Select>

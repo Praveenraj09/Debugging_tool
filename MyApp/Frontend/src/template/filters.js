@@ -11,6 +11,7 @@ import HighchartsReact from 'highcharts-react-official';
 import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
+import MultiSelectDropdown from './MultiSelectDropDown';
 import { format, subDays } from 'date-fns';
 import * as XLSX from 'xlsx';
 
@@ -20,6 +21,7 @@ function Filters() {
   const [value, setValue] = useState('');
   const [filterColumn, setFilterColumn] = useState('');
   const [columns, setColumns] = useState([]);
+  const [selectedcolumns, setSelectedcolumns] = useState([]);
   const [xvalues, setXvalues] = useState([]);
   const [avalues, setAvalues] = useState([]);
   const [anames, setAnames] = useState([]);
@@ -37,121 +39,122 @@ function Filters() {
   const [showcountPreview, setShowcountPreview] = useState(false);
   const [runCountResult, setRunCountResult] = useState('Fetching...');
   const [open, setOpen] = useState(false);
+  const [selectedValues, setSelectedValues] = useState([]);
+  const [initialColumnsLoaded, setInitialColumnsLoaded] = useState(false); // Track initial columns load
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     setOpen(false);
-  }, []);
+  };
 
-  const toggleFilterDropDownDropdown = useCallback(() => {
+  const toggleFilterDropDownDropdown = () => {
     setShowFilterDropDown(prevState => !prevState);
-  }, []);
+  };
 
-  const toggleFilterSelecttedDropdown = useCallback(() => {
+  const toggleFilterSelecttedDropdown = () => {
     setShowFilterSelected(prevState => !prevState);
-  }, []);
+  };
 
-  const toggleshowDataPreviewDropdown = useCallback(() => {
+  const toggleshowDataPreviewDropdown = () => {
     setShowDataPreview(prevState => !prevState);
-  }, []);
+  };
 
-  const toggleCountDropdown = useCallback(() => {
+  const toggleCountDropdown = () => {
     setShowcountPreview(prevState => !prevState);
-  }, []);
+  };
 
-  const exportToExcel = useCallback(() => {
+  const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(storedRows);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
     XLSX.writeFile(workbook, 'table_data.xlsx');
-  }, [storedRows]);
+  };
 
   const formattedConditions = useMemo(() => {
     return conditions.map(condition => `${condition.field} ${condition.operator} '${condition.value}'`).join(' AND ');
   }, [conditions]);
 
-  const payload = useMemo(() => {
+  const payload = () => {
     return {
       rowCount: 100,
       conditions: formattedConditions,
+      columns: selectedValues,
       minTime: xAxisMin,
       maxTime: xAxisMax,
       currentPage,
       itemsPerPage
     };
-  }, [formattedConditions, xAxisMin, xAxisMax, currentPage, itemsPerPage]);
-
-  const fetchFilterTable = useCallback(async () => {
+  };
+  const filtersColumn = async() => {
     setLoading(true);
-    setLoading2(true);
     try {
-      const response = await axios.post('/filter_table', {params: payload});
-      const data = response.data;
-      setColumns(data.columns);
-      setAnames(data.filters.a_names);
-      setRunCountResult(`Results for selected criteria is: ${data.runCount[0]["counts"]} rows`);
-      setLoading(false);
-      setLoading2(false);
-      setOpen(true);
-    } catch (error) {
-      setLoading(false);
-      setLoading2(false);
-      console.error('Error fetching filter table:', error);
-    }
-  }, [payload]);
-
-  const filtersColumn = useCallback(async () => {
-    try {
-      const response = await axios.get('/columns');
+      const response =  await axios.get('/columns');
       setColumns(response.data);
     } catch (error) {
       console.error('Error fetching columns:', error);
       setLoading(false);
     }
-  }, []);
+  };
+  const fetchFilterTable =  async() => {
+    setLoading(true);
+    try {
+      const response =  await axios.post('/filter_table', { params: payload });
+      const data = response.data;
+      setSelectedcolumns(data.columns);
+      setAnames(data.filters.a_names);
+      setRunCountResult(`Results for selected criteria is: ${data.runCount[0]["counts"]} rows`);
+      setLoading(false);
+      setOpen(true);
+    } catch (error) {
+      console.error('Error fetching filter table:', error);
+      setLoading(false);
+    }
+  };
 
-  const fetchFilters = useCallback(async () => {
-  setLoading(true);
-  try {
-    const response = await axios.get('/filters',payload);
-    const data = response.data;
-    setXvalues(data.x_values);
-    setAvalues(data.a_values);
-    setAnames(data.a_names);
-  } catch (error) {
-    console.error('Error fetching filters:', error);
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  const fetchFilters = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get('/filters');
+      const data = response.data;
+      setXvalues(data.x_values);
+      setAvalues(data.a_values);
+      setAnames(data.a_names);
+    } catch (error) {
+      console.error('Error fetching filters:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const fetchData = useCallback(async () => {
+  const fetchData =  async () => {
     setLoading2(true);
     try {
-      const conditionString = conditions.map(condition => `${condition.field} ${condition.operator} '${condition.value}'`).join(' AND ');
-      const payload = {
+      const conditionString = conditions.map(condition => `Str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
+      const fetchPayload = {
         conditions: conditionString,
-        selectedRows,
+        columns: selectedValues,
         page: currentPage,
         minTime: xAxisMin,
         maxTime: xAxisMax,
         itemsPerPage
       };
-      const response = await axios.post('/fetch_data', payload);
+      console.log(fetchPayload)
+      const response = await axios.post('/fetch_data', fetchPayload);
       const formattedData = response.data.datas;
       setStoredRows(formattedData);
-      setColumns(response.data.columns);
+      setSelectedcolumns(response.data.columns);
       const startIdx = (currentPage - 1) * itemsPerPage;
       const endIdx = currentPage * itemsPerPage;
       setSelectedRows(formattedData.slice(startIdx, endIdx));
       fetchRunCount(conditions, xAxisMin, xAxisMax);
+      
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading2(false);
     }
-  }, [conditions, selectedRows, currentPage, xAxisMin, xAxisMax, itemsPerPage]);
+  };
 
-  const fetchRunCount = useCallback(async (conditions, xAxisMin, xAxisMax) => {
+  const fetchRunCount =  async (conditions) => {
     setRunCountResult('Fetching...');
     try {
       let conditionString = '';
@@ -165,17 +168,17 @@ function Filters() {
         minTime: xAxisMin,
         maxTime: xAxisMax
       };
-      const response = await axios.post('/run_count', payload);
+      const response =  await axios.post('/run_count', payload);
       setRunCountResult(`Results for selected criteria is: ${response.data[0]["counts"]} rows`);
       setOpen(true);
     } catch (error) {
       console.error('Error fetching run count:', error);
     }
-  }, []);
+  };
 
-  const handlePageChange = useCallback((page) => setCurrentPage(page), []);
+  const handlePageChange = (page) => setCurrentPage(page);
 
-  const handleFilterTableChange = useCallback((e) => {
+  const handleFilterTableChange = (e) => {
     setFilterColumn(e.target.value);
     const selectedColumnValues = storedRows.map((row) => row[e.target.value]);
     const uniqueValues = Array.from(new Set(selectedColumnValues)).filter(value => {
@@ -190,16 +193,16 @@ function Filters() {
       return false;
     });
     setSuggestions(uniqueValues);
-  }, [storedRows]);
+  };
 
-  const handleValueChange = useCallback((e) => {
+  const handleValueChange = (e) => {
     const typedText = e.target.value.trim().toLowerCase();
     const filteredSuggestions = suggestions.filter((suggestion) => suggestion.toLowerCase().includes(typedText));
     setSuggestions(filteredSuggestions);
     setValue(e.target.value);
-  }, [suggestions]);
+  };
 
-  const addCondition = useCallback(() => {
+  const addCondition = () => {
     if (filterColumn === '' || !validateInput()) {
       alert('Both Condition and value are required');
       return;
@@ -207,45 +210,39 @@ function Filters() {
     const newCondition = { field: filterColumn, operator: 'like', value: `%${value}%` };
     const updatedCondition = [...conditions, newCondition];
     setConditions(updatedCondition);
-    if (xAxisMin === null) {
-      alert('StartDate is required');
-      return;
-    }
-    if (xAxisMax === null) {
-      alert('EndDate is required');
-      return;
-    }
-    fetchRunCount(updatedCondition, xAxisMin, xAxisMax);
-  }, [filterColumn, value, conditions, xAxisMin, xAxisMax, fetchRunCount]);
+    setFilterColumn('');
+    setValue('');
+    setSuggestions([]);
+  };
 
-  const validateInput = useCallback(() => {
-    const inputValue = value.trim();
-    if (inputValue === '') {
-      alert('Please enter a value');
-      return false;
-    }
-    if (inputValue.length > 50) {
-      alert('Value is too long. Please enter a value less than 50 characters');
-      return false;
-    }
-    if (/[^a-zA-Z0-9\s]/.test(inputValue)) {
-      alert('Value contains invalid characters. Please enter alphanumeric characters only');
-      return false;
-    }
-    return true;
-  }, [value]);
+  const validateInput = () => {
+    return filterColumn !== '' && value.trim() !== '';
+  };
 
-  const handleDeleteCondition = useCallback((index) => {
+  const handleDelete = (index) => {
     const updatedCondition = [...conditions];
     updatedCondition.splice(index, 1);
     setConditions(updatedCondition);
-  }, [conditions]);
+  };
 
-  useEffect(() => {
-    fetchFilters();
-  }, [fetchFilters, filtersColumn]);
+  const handleDateChange = (dates) => {
+    if (dates === null) {
+      setXAxisMin(null);
+      setXAxisMax(null);
+    } else {
+      setXAxisMin(dates[0]);
+      setXAxisMax(dates[1]);
+    }
+  };
 
-  const escapedColumns = columns.map((column) => ({
+  
+  const handleDeleteCondition = (index) => {
+    const updatedCondition = [...conditions];
+    updatedCondition.splice(index, 1);
+    setConditions(updatedCondition);
+  };
+
+  const escapedColumns = selectedcolumns.map((column) => ({
     field: column.column_name,
     headerName: column.column_name,
     sortable: true,
@@ -371,8 +368,19 @@ const formattedDates = xvalues.map((timestamp) => {
     },
   };
   
- 
-  
+  useEffect(() => {
+    if (!initialColumnsLoaded) {
+      filtersColumn();
+      fetchFilters();
+      setInitialColumnsLoaded(true);// Only fetch columns if they haven't been fetched already
+    }
+  }, [initialColumnsLoaded]);
+
+  const handleOnChangeDropDown = (values) => {
+    setSelectedValues(values);
+    // Handle selected values here
+    console.log('Selected values:', values);
+  };
   
   const escapeOperandAttributeSelector = (operand) => {
     if (typeof operand !== 'string') {
@@ -399,7 +407,9 @@ const formattedDates = xvalues.map((timestamp) => {
         </IconButton></Typography>
                 {showFilterDropDown && (
                   <>
+                 
                 <FormControl fullWidth style={{marginTop:'20px'}} required>
+                
                   <InputLabel style={{marginTop:'-5px'}} htmlFor="filterColumn">Select a Column:</InputLabel>
                   <Select
                     id="filterColumn"
@@ -561,6 +571,11 @@ const formattedDates = xvalues.map((timestamp) => {
         
         </div>
         </>)}
+        <div className="row" style={{ marginTop: '20px', minHeight: '500px',maxHeight: '500px', overflowX: 'auto' }}>
+        <FormControl fullWidth style={{marginTop:'20px'}} required>
+                  <MultiSelectDropdown columns={columns} onChange={handleOnChangeDropDown} />
+                  </FormControl>
+        </div>
         </Grid>
         <Grid item xs={10}>
        

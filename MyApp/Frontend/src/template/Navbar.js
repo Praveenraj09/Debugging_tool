@@ -64,7 +64,7 @@ function Navbar() {
             inputProps={{ 'aria-label': 'Select' }}
           >
             <MenuItem value="" disabled>
-            <Button variant="h6" color="inherit" sx={{ marginLeft: '10px' }} style={{color:'white'}}>Report</Button>
+            <Button variant="h6" color="inherit" sx={{ marginLeft: '10px' }} style={{color:'white'}}>Analytical Reports</Button>
             </MenuItem>
             {reportOptions.map((option, index) => (
               <MenuItem key={index} value={option}>{option}</MenuItem>

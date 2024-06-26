@@ -97,7 +97,7 @@ function Report() {
   }, [storedRows]);
 
   const formattedConditions = useMemo(() => {
-    return conditions.map(condition => `${condition.field} ${condition.operator} '${condition.value}'`).join(' AND ');
+    return conditions.map(condition => ` str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
   }, [conditions]);
 
   const payload = useMemo(() => {
@@ -116,7 +116,7 @@ function Report() {
   const fetchData = useCallback(async () => {
     setLoading2(true);
     try {
-      const conditionString = conditions.map(condition => `${condition.field} ${condition.operator} '${condition.value}'`).join(' AND ');
+      const conditionString = conditions.map(condition => ` str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
       const payload = {
         conditions: conditionString,
         selectedRows,
