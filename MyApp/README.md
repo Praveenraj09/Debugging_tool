@@ -1,5 +1,5 @@
 ### ABOUT THE APPLICATION
-Hi
+
 This application is a developer-friendly debugging tool built with ReactJS, offering a seamless and efficient debugging experience for developers. With a focus on usability and performance, it provides a range of features to facilitate effective debugging of ReactJS applications.
 
 #### Functionalities:

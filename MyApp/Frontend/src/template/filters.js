@@ -41,7 +41,16 @@ function Filters() {
   const [open, setOpen] = useState(false);
   const [selectedValues, setSelectedValues] = useState([]);
   const [initialColumnsLoaded, setInitialColumnsLoaded] = useState(false); // Track initial columns load
-
+  function formatDateToUS(dateObject) {
+    return dateObject.toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true, // Include AM/PM
+    });
+  }
   const handleClose = () => {
     setOpen(false);
   };
@@ -212,6 +221,7 @@ function Filters() {
     setConditions(updatedCondition);
     setFilterColumn('');
     setValue('');
+    fetchRunCount(newCondition)
     setSuggestions([]);
   };
 
@@ -249,7 +259,13 @@ function Filters() {
     width: 250,
   }));
 
-
+  const formatDateTime = (datetime) => {
+    // Split the datetime string into date and time parts
+    const [date, time] = datetime.split('T');
+    // Ensure the time includes seconds set to 00
+    const timeWithSeconds = `${time}:00`;
+    return `${date} ${timeWithSeconds}`;
+  };
 
   
   function convertToCustomFormat(formattedDate) {
@@ -271,7 +287,7 @@ function Filters() {
     const formattedHour = hour.padStart(2, '0');
     const formattedMinute = minute.padStart(2, '0');
   
-    return `${year}-${formattedMonth}-${formattedDay} ${formattedHour}:${formattedMinute}:00.000`;
+    return `${year}-${formattedMonth}-${formattedDay} ${formattedHour}:${formattedMinute}:00`;
   }
 const formattedDates = xvalues.map((timestamp) => {
   const date = new Date(timestamp);
@@ -292,16 +308,18 @@ const formattedDates = xvalues.map((timestamp) => {
       zoomType: 'x',
     },
     title: {
-      text: 'Time Chart',
+      text: 'Time/Count Chart',
     },
     xAxis: {
       categories: formattedDates,
       type: 'category',
+      title: {
+        text: 'Time',
+      },
       events: {
         afterSetExtremes: function(e) {
-          setXAxisMin(e.min);
-          setXAxisMax(e.max);
-          const minIndex = Math.round(e.min);
+          
+      const minIndex = Math.round(e.min);
       const maxIndex = Math.round(e.max);
       const maxXValue = convertToCustomFormat(formattedDates[minIndex]);
       const minXValue = convertToCustomFormat(formattedDates[maxIndex]);     
@@ -314,7 +332,7 @@ const formattedDates = xvalues.map((timestamp) => {
     },
     yAxis: {
       title: {
-        text: 'Request ID',
+        text: 'Record Count',
       },
     },
     credits: {
@@ -322,7 +340,7 @@ const formattedDates = xvalues.map((timestamp) => {
   },
     tooltip: {
       headerFormat: 'time: <b>{point.x}</b><br>',
-      pointFormat: '{series.name}: <b>{point.y}</b><br>',
+      pointFormat: 'Count: <b>{point.y}</b><br>',
     },
     plotOptions: {
       area: {
@@ -463,7 +481,7 @@ const formattedDates = xvalues.map((timestamp) => {
   value={xAxisMin}
   onChange={(event) => {
     const datetime = event.target.value;
-    setXAxisMin(datetime);
+    setXAxisMin(formatDateTime(datetime));
     fetchRunCount(null, datetime, xAxisMax);
   }}
   InputLabelProps={{
@@ -480,7 +498,7 @@ const formattedDates = xvalues.map((timestamp) => {
   value={xAxisMax}
   onChange={(event) => {
     const datetime = event.target.value;
-    setXAxisMax(datetime);
+    setXAxisMax(formatDateTime(datetime));
     fetchRunCount(null, xAxisMin, datetime);
   }}
   InputLabelProps={{

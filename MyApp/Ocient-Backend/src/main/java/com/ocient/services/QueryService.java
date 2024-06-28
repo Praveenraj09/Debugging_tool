@@ -60,10 +60,22 @@ public class QueryService {
 	@Value("${ocient.db.dashboardTableQuery}")
 	private String dashboardTableQuery;
 
-	@PostConstruct
-	public void init() {
-		// Load configurations if needed
-	}
+	@Value("${ocient.db.join_required}")
+	private boolean joinRequired;
+
+	@Value("${ocient.db.jointable_count}")
+	private int joinTableCount;
+
+	@Value("${ocient.db.jointable1}")
+	private String joinTable1;
+
+	@Value("${ocient.db.jointable1_primaryid}")
+	private String joinTable1PrimaryId;
+
+	@Value("${ocient.db.viewable_primaryId}")
+	private String viewable_primaryId;
+
+
 
 	public Map<String, Object> getDashboard() {
 		List<Map<String, Object>> schemas = runQuery(q_schemas);
@@ -141,10 +153,39 @@ public class QueryService {
 
 		return response;
 	}
-
 	public List<Map<String, Object>> getColumns() {
-		String query = "SELECT column_name FROM information_schema.columns WHERE table_name = '" + viewTable + "'";
-		return runQuery(query);
+	    StringBuilder queryBuilder = new StringBuilder("SELECT ");
+	    if (joinRequired) {
+	        queryBuilder.append("c.table_name || '.' || c.column_name AS column_name ");
+	    } else {
+	        queryBuilder.append("c.table_name || '.' || c.column_name AS column_name ");
+	    }
+	    queryBuilder.append("FROM information_schema.columns c WHERE c.table_schema = '")
+	                .append(schema).append("' AND c.table_name = '").append(viewTable).append("'");
+
+	    if (joinRequired) {
+	        for (int i = 1; i <= joinTableCount; i++) {
+	            String joinTable = getJoinTable(i);
+	            if (joinTable != null && !joinTable.isEmpty()) {
+	                queryBuilder.append(" UNION ALL SELECT '").append(joinTable).append("' || '.' || c.column_name AS column_name ")
+	                            .append("FROM information_schema.columns c WHERE c.table_schema = '")
+	                            .append(schema).append("' AND c.table_name = '").append(joinTable).append("'");
+	            }
+	        }
+	    }
+
+	    String query = queryBuilder.toString();
+	    return runQuery(query);
+	}
+
+	private String getJoinTable(int index) {
+	    switch (index) {
+	        case 1:
+	            return joinTable1;
+	        
+	        default:
+	            return null;
+	    }
 	}
 
 	public Map<String, Object> getFilters(Map<String, Object> payload) {
@@ -211,19 +252,25 @@ public class QueryService {
 		// If columns are not provided in payload, get default columns
 		if (columns == null || columns.isEmpty()) {
 			Map<String, Object> timeColumnMap = new HashMap<>();
-			timeColumnMap.put("column_name", timeColumns); // Assuming the key for column name is "name"
+			timeColumnMap.put("column_name", (viewTables+"."+timeColumns)); // Assuming the key for column name is "name"
 			columns = Collections.singletonList(timeColumnMap); // Assuming getColumns() retrieves default columns
 		}
 
 		// Construct column names string for SQL query
-		String columnNames = columns.stream().map(column -> "\"" + column.get("column_name") + "\"")
+		String columnNames = columns.stream().map(column -> "" + column.get("column_name") + " as \""+column.get("column_name")+"\" ")
 				.collect(Collectors.joining(", "));
-
+		
 		System.out.println(columnNames);
-		String query = String.format(
-				"SELECT %s FROM %s.%s WHERE %s >= '%s' AND %s <= '%s' %s ORDER BY %s DESC LIMIT %d", columnNames,
-				schema, viewTables, timeColumn, minTime, timeColumns, maxTime,
-				!conditions.isBlank() ? "AND " + conditions : "", timeColumn, rowCount);
+		String query = "SELECT "+columnNames+" FROM "+schema+"."+viewTables+" ";
+		if(joinRequired) {
+			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" ";
+		}
+		query+= " WHERE "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"' ";
+		if(joinRequired) {
+			query+= " AND "+ joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable1+"."+timeColumn+" <= '"+maxTime+"' ";
+		}
+		query+=		 (!conditions.isBlank() ? "AND " + conditions : "")+" ORDER BY "+ viewTables+"."+timeColumn+" DESC LIMIT "+rowCount;
+		 
 
 		// Log the constructed query for debugging
 
@@ -237,7 +284,7 @@ public class QueryService {
 
 		return response;
 	}
-
+	
 	public List<Map<String, Object>> runCount(Map<String, Object> payload) {
 		String conditions = (String) payload.get("conditions");
 		String minTime = (String) payload.get("minTime");

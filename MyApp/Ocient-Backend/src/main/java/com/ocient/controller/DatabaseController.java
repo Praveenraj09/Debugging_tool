@@ -2,6 +2,7 @@ package com.ocient.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -87,11 +88,18 @@ public class DatabaseController {
 		return queryService.getChartData(payload);
 	}
 
-	@PostMapping("/fetch_data")
-	public Map<String, Object> fetchData(@RequestBody Map<String, Object> payload) {
-		System.out.println("calling /fetch_data");
-		return queryService.fetchData(payload);
-	}
+	 @PostMapping("/fetch_data")
+	    public ResponseEntity<Map<String, Object>> fetchData(@RequestBody Map<String, Object> payload) {
+	        System.out.println("calling /fetch_data");
+
+	        Map<String, Object> result = queryService.fetchData(payload);
+
+	        if (result != null) {
+	            return ResponseEntity.ok(result);
+	        } else {
+	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+	        }
+	    }
 
 	@PostMapping("/run_count")
 	public List<Map<String, Object>> runCount(@RequestBody Map<String, Object> payload) {
