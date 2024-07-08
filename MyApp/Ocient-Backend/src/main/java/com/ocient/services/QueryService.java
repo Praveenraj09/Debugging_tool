@@ -56,6 +56,12 @@ public class QueryService {
 
 	@Value("${ocient.db.row_count}")
 	private int rowCount;
+	
+	@Value("${ocient.db.chart_points}")
+	private int chart_points;
+	
+	@Value("${ocient.db.chart_frequncy}")
+	private int chart_frequncy;
 
 	@Value("${ocient.db.dashboardTableQuery}")
 	private String dashboardTableQuery;
@@ -154,29 +160,42 @@ public class QueryService {
 		return response;
 	}
 	public List<Map<String, Object>> getColumns() {
-	    StringBuilder queryBuilder = new StringBuilder("SELECT ");
+	    StringBuilder queryBuilder = new StringBuilder();
+
 	    if (joinRequired) {
-	        queryBuilder.append("c.table_name || '.' || c.column_name AS column_name ");
+	        // Select all columns from primary table
+	        queryBuilder.append("SELECT '").append(joinTable1).append("' || '.' || c1.column_name AS column_name, c1.data_type as data_type ")
+	                    .append("FROM information_schema.columns c1 ")
+	                    .append("WHERE c1.table_schema = '").append(schema).append("' ")
+	                    .append("AND c1.table_name = '").append(joinTable1).append("' ")
+	                    .append("UNION ALL ");
+
+	          
+	                
+	                queryBuilder.append("SELECT '").append(viewTable).append("' || '.' || c2.column_name AS column_name, c2.data_type as data_type  ")
+	                            .append("FROM information_schema.columns c2 ")
+	                            .append("LEFT JOIN information_schema.columns c1 ")
+	                            .append("ON c1.column_name = c2.column_name ")
+	                            .append("AND c1.table_name = '").append(joinTable1).append("' ")
+	                            .append("AND c1.table_schema = '").append(schema).append("' ")
+	                            .append("WHERE c2.table_schema = '").append(schema).append("' ")
+	                            .append("AND c2.table_name = '").append(viewTable).append("' ")
+	                            .append("AND c1.column_name IS NULL ");
+	            
+	        
 	    } else {
-	        queryBuilder.append("c.table_name || '.' || c.column_name AS column_name ");
-	    }
-	    queryBuilder.append("FROM information_schema.columns c WHERE c.table_schema = '")
-	                .append(schema).append("' AND c.table_name = '").append(viewTable).append("'");
-
-	    if (joinRequired) {
-	        for (int i = 1; i <= joinTableCount; i++) {
-	            String joinTable = getJoinTable(i);
-	            if (joinTable != null && !joinTable.isEmpty()) {
-	                queryBuilder.append(" UNION ALL SELECT '").append(joinTable).append("' || '.' || c.column_name AS column_name ")
-	                            .append("FROM information_schema.columns c WHERE c.table_schema = '")
-	                            .append(schema).append("' AND c.table_name = '").append(joinTable).append("'");
-	            }
-	        }
+	        // Select all columns from the primary table
+	        queryBuilder.append("SELECT c.table_name || '.' || c.column_name AS column_name, c.data_type as data_type  ")
+	                    .append("FROM information_schema.columns c ")
+	                    .append("WHERE c.table_schema = '").append(schema).append("' ")
+	                    .append("AND c.table_name = '").append(viewTable).append("' ");
 	    }
 
+	    queryBuilder.append("ORDER BY column_name");
 	    String query = queryBuilder.toString();
 	    return runQuery(query);
 	}
+
 
 	private String getJoinTable(int index) {
 	    switch (index) {
@@ -193,18 +212,30 @@ public class QueryService {
 		String viewTables = (String) payload.getOrDefault("viewTable", viewTable);
 
 		String query = String.format(
-				"SELECT DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% 5) AS time_range_start, "
-						+ "DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% 5) + INTERVAL '5 minute' AS time_range_end, "
+				"SELECT DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) AS time_range_start, "
+						+ "DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) + INTERVAL '5 minute' AS time_range_end, "
 						+ "COUNT(*) AS record_count FROM %s.%s GROUP BY time_range_start, time_range_end ORDER BY time_range_start DESC LIMIT %d",
-				timeColumns, timeColumns, timeColumns, timeColumns, schema, viewTables, rowCount);
+				timeColumns, timeColumns,chart_frequncy, timeColumns, timeColumns,chart_frequncy, schema, viewTables, chart_points);
 		List<Map<String, Object>> data = runQuery(query);
 
 		List<String> xValues = new ArrayList<>();
 		List<Long> aValues = new ArrayList<>();
-		for (Map<String, Object> row : data) {
-			xValues.add(ConvertionFunction.convertDate(row.get("time_range_start")));
-			aValues.add((Long) row.get("record_count"));
-		}
+		List<Map<String, Object>> combinedList = new ArrayList<>();
+        for (Map<String, Object> row : data) {
+            Map<String, Object> combinedMap = new HashMap<>();
+            combinedMap.put("time_range_start", ConvertionFunction.convertDate(row.get("time_range_start")));
+            combinedMap.put("record_count", (Long) row.get("record_count"));
+            combinedList.add(combinedMap);
+        }
+
+        // Sort the list of maps based on the time_range_start
+        combinedList.sort(Comparator.comparing(o -> (String) o.get("time_range_start")));
+
+        // Extract the sorted values back into separate lists
+        for (Map<String, Object> combinedMap : combinedList) {
+            xValues.add((String) combinedMap.get("time_range_start"));
+            aValues.add((Long) combinedMap.get("record_count"));
+        }
 
 		Map<String, Object> response = new HashMap<>();
 		response.put("x_values", xValues);
@@ -299,12 +330,23 @@ public class QueryService {
 
 		}
 		System.out.println(conditions + " " + minTime + " " + maxTime);
-		String query = String.format("SELECT COUNT(*) AS counts FROM %s.%s WHERE %s <= '%s' %s", schema, viewTable,
-				timeColumn, maxTime != null ? maxTime : ConvertionFunction.convertDate(new Date()),
-				minTime != null ? "AND " + timeColumn + " >= '" + minTime + "'" : "");
-		if (null != conditions && !conditions.isBlank()) {
-			query += " AND " + conditions;
+		String query = "SELECT count(*) AS counts FROM "+schema+"."+viewTable+" ";
+		if(joinRequired) {
+			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTable+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" ";
 		}
+		query+= " WHERE "+ viewTable+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTable+"."+timeColumn+" <= '"+maxTime+"' ";
+		if(joinRequired) {
+			query+= " AND "+ joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable1+"."+timeColumn+" <= '"+maxTime+"' ";
+		}
+		query+=		 (!conditions.isBlank() ? "AND " + conditions : "");
+		 
+//
+//		String query = String.format("SELECT COUNT(*) AS counts FROM %s.%s WHERE %s <= '%s' %s", schema, viewTable,
+//				timeColumn, maxTime != null ? maxTime : ConvertionFunction.convertDate(new Date()),
+//				minTime != null ? "AND " + timeColumn + " >= '" + minTime + "'" : "");
+//		if (null != conditions && !conditions.isBlank()) {
+//			query += " AND " + conditions;
+//		}
 		return runQuery(query);
 	}
 
@@ -383,7 +425,18 @@ public class QueryService {
 			while (rs.next()) {
 				Map<String, Object> row = new HashMap<>(columnCount);
 				for (String columnName : columnNames) {
-					row.put(columnName, rs.getObject(columnName));
+					//convert the arrayObject data to list
+					Object obj = rs.getObject(columnName);
+					if(null==obj) {
+						row.put(columnName, "NULL");
+					}
+					else if(obj.getClass().toString().contains("XGArray")) {
+						row.put(columnName, rs.getObject(columnName).toString());
+						
+					}else {
+						row.put(columnName, rs.getObject(columnName));
+					}
+					
 				}
 				row.put("id", id++); // Add id field
 				result.add(row);

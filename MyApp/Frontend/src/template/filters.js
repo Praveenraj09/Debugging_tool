@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import axios from 'axios'; 
+import axios from 'axios';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Container, Grid, Typography, IconButton, Paper, Popper, Table, TableHead, TableRow, TableCell, TableBody, CardContent, CircularProgress, List, ListItem, ListItemText, CardHeader, FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
 import Navbar from './Navbar';
@@ -93,24 +93,24 @@ function Filters() {
       itemsPerPage
     };
   };
-  const filtersColumn = async() => {
+  const filtersColumn = async () => {
     setLoading(true);
     try {
-      const response =  await axios.get('/columns');
+      const response = await axios.get('/columns');
       setColumns(response.data);
     } catch (error) {
       console.error('Error fetching columns:', error);
       setLoading(false);
     }
   };
-  const fetchFilterTable =  async() => {
+  const fetchFilterTable = async () => {
     setLoading(true);
     try {
-      const response =  await axios.post('/filter_table', { params: payload });
+      const response = await axios.post('/filter_table', { params: payload });
       const data = response.data;
       setSelectedcolumns(data.columns);
       setAnames(data.filters.a_names);
-      setRunCountResult(`Results for selected criteria is: ${data.runCount[0]["counts"]} rows`);
+      setRunCountResult(`Results for selected criteria is: ${formatNumber(data.runCount[0]["counts"])} records`);
       setLoading(false);
       setOpen(true);
     } catch (error) {
@@ -134,10 +134,15 @@ function Filters() {
     }
   };
 
-  const fetchData =  async () => {
+  const fetchData = async () => {
     setLoading2(true);
     try {
-      const conditionString = conditions.map(condition => `Str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
+      const conditionString = conditions.map(condition => {
+
+        return `(${condition.field} ${condition.operator} ${condition.value})`;
+
+      }).join(' AND ');
+      //const conditionString = conditions.map(condition => `Str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
       const fetchPayload = {
         conditions: conditionString,
         columns: selectedValues,
@@ -155,21 +160,30 @@ function Filters() {
       const endIdx = currentPage * itemsPerPage;
       setSelectedRows(formattedData.slice(startIdx, endIdx));
       fetchRunCount(conditions, xAxisMin, xAxisMax);
-      
+
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading2(false);
     }
   };
+  const renderConditionValue = (condition) => {
+    return `${condition.field} ${condition.operator} ${condition.value}`;
+  }
 
-  const fetchRunCount =  async (conditions) => {
+
+  const fetchRunCount = async (conditions, xAxisMin, xAxisMax) => {
     setRunCountResult('Fetching...');
     try {
       let conditionString = '';
       if (conditions && conditions.length > 0) {
-        conditionString = conditions.map(condition => `Str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
-      }
+        conditionString = conditions.map(condition => {
+
+          return `(${condition.field} ${condition.operator} ${condition.value})`;
+
+        }).join(' AND ');
+        //conditionString = conditions.map(condition => `Str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
+      } console.log(conditionString)
       const payload = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,8 +191,8 @@ function Filters() {
         minTime: xAxisMin,
         maxTime: xAxisMax
       };
-      const response =  await axios.post('/run_count', payload);
-      setRunCountResult(`Results for selected criteria is: ${response.data[0]["counts"]} rows`);
+      const response = await axios.post('/run_count', payload);
+      setRunCountResult(`Results for selected criteria is: ${formatNumber(response.data[0]["counts"])} records`);
       setOpen(true);
     } catch (error) {
       console.error('Error fetching run count:', error);
@@ -210,18 +224,201 @@ function Filters() {
     setSuggestions(filteredSuggestions);
     setValue(e.target.value);
   };
+  const getColumnType = (columnName) => {
+    console.log(columnName)
+
+    const column = columns.find(col => col.column_name === columnName);
+    return column ? column.data_type : null;
+  };
+  // const addCondition = () => {
+  //   if (filterColumn === '' || !validateInput()) {
+  //     alert('Both Condition and value are required');
+  //     return;
+  //   }
+  //   const isInOperator = value.includes(',');
+
+  // // Create new condition based on whether to use IN or LIKE operator
+  // const newCondition = isInOperator 
+  //   ? { field: filterColumn, operator: 'in', value: value.split(',').map(v => v.trim()) } 
+  //   : { field: filterColumn, operator: 'like', value: `%${value}%` };
+
+  //   //const newCondition = { field: filterColumn, operator: 'like', value: `%${value}%` };
+  //   const updatedCondition = [...conditions, newCondition];
+  //   setConditions(updatedCondition);
+  //   setFilterColumn('');
+  //   setValue('');
+  //   fetchRunCount(updatedCondition,xAxisMin,xAxisMax)
+  //   setSuggestions([]);
+  // };
+
 
   const addCondition = () => {
     if (filterColumn === '' || !validateInput()) {
       alert('Both Condition and value are required');
       return;
     }
-    const newCondition = { field: filterColumn, operator: 'like', value: `%${value}%` };
-    const updatedCondition = [...conditions, newCondition];
-    setConditions(updatedCondition);
+    const charVarcharTypes = ['char', 'varchar','ipv'];
+    const tinyintTypes = ['tinyint',  'smallint'];
+    const columnType = getColumnType(filterColumn).toLowerCase();
+    const isCharVarcharType = charVarcharTypes.some(type => columnType.includes(type));
+    const isTinySmallBigIntType = tinyintTypes.some(type => columnType.includes(type));
+
+    //temperory fix starts
+    const tempValues = filterColumn.split(".");
+    const tempTableGDCColumn = [
+      "deals_dealid",
+      "geo_isosecondarysubdivision",
+      "geo_countrycode_postalcode",
+      "geo_countrycode_regioncode_city",
+      "geo_city",
+      "allowedcreativetypes",
+      "geo_countrycode_regioncode",
+      "traffictype",
+      "device_type",
+      "pageposition",
+      "hasifa_internaluserid",
+      "geo_countrycode_dmacode",
+      "geo_countrycode",
+      "geo_countrycode_isoprimarysubdivision",
+      "nobidreason",
+      "adstxtstatus",
+      "appid_storename",
+      "auctionresponse_dealid",
+      "unifiedbannerdimensions",
+      "auctiontype",
+      "finaldecisionentitytype",
+      "deals_auctiontype",
+      "bidder_datacentername",
+      "nobidreason",
+      "language",
+      "geo_countryname",
+      "geo_regioncode",
+      "geo_isoprimarysubdivision",
+      "geo_fipsregioncode",
+      "geo_regionname",
+      "geo_postalcode",
+      "geo_sourcetype",
+      "os",
+      "browser",
+      "connectiontype",
+      "carrier_name",
+      "model",
+      "internaluseridspecialindicator",
+      "campaignfrequencies_granularitykey",
+      "rawos",
+      "rawbrowser",
+      "sourceblockedattributeids",
+      "video_startdelay",
+      "video_videoplaybackmode",
+      "video_videoquality",
+      "video_skippability",
+      "video_dimensionsmatchingstrategy",
+      "video_videoplacementtype",
+      "video_outstreamplacementtype",
+      "audio_startdelay",
+      "serversideadinsertionstatus",
+      "appid_platform",
+      "sitecontextualprofile_appplatform",
+      "sitecontextualprofile_appstorename",
+      "sitecontextualprofile_countrycode",
+      "contextualdataset_providername",
+      "auctionresponse_dealid",
+      "traffictype",
+      "device_type",
+      "pageposition",
+      "hasifa_internaluserid",
+      "inventoryaccessplannobidreason",
+      "trafficsource_content_language"
+    ];
+
+    const isTempColumnPresent = tempTableGDCColumn.includes(tempValues[1]);
+
+    console.log(tempValues[1] + "" + isTempColumnPresent)
+    //temperory fix ends
+    const isInOperator = value.includes(',');
+    console.log(filterColumn + " = " + columnType + " " + isInOperator + " " + value)
+    let newCondition;
+    const values = value.split(',').map(v => v.trim());
+    if (value.toLowerCase().includes('null')) {
+      newCondition = { field: filterColumn, operator: 'is', value: value };
+    }
+    else if (isInOperator) {// multi value
+      if (!columnType.includes('[]')) {  //non array type for multi value
+
+        //temperory fix 
+         if(isTempColumnPresent){
+          newCondition = { field: filterColumn, operator: 'in', value: `(${values.map(v => `'${v}'`).join(', ')})` };
+         }
+        //temperory fix 
+        else if (isCharVarcharType) {
+          // Non-array type and varchar/char
+          newCondition = { field: filterColumn, operator: 'in', value: `(${values.map(v => `'${v}'`).join(', ')})` };
+        }
+        else if (isTinySmallBigIntType) {
+          // Non-array type and bigint/tinyint/smallint
+          newCondition = { field: `${filterColumn}`, operator: 'in', value: `(${values.map(v => `${v}`).join(', ')})` };
+        } else {
+          // Non-array type and not varchar/char
+          newCondition = { field: filterColumn, operator: 'in', value: `(${values.join(', ')})` };
+        }
+      } else { // array type for multi value
+        //temperory fix 
+        if(isTempColumnPresent){
+          newCondition = { field: filterColumn, operator: '&&', value: `ARRAY[${values.map(v => `'${v}'`).join(', ')}]` };
+         }
+        //temperory fix 
+        else if (isCharVarcharType) {
+          // Array type and varchar/char
+          newCondition = { field: filterColumn, operator: '&&', value: `ARRAY[${values.map(v => `'${v}'`).join(', ')}]` };
+        } else if (isTinySmallBigIntType) {
+          // array type and bigint/tinyint/smallint
+          newCondition = { field: `${filterColumn}`, operator: '&&', value: `ARRAY[${values.map(v => `${v}`).join(', ')}]` };
+        }
+        else {
+          // Array type and not varchar/char
+          newCondition = { field: filterColumn, operator: '&&', value: `ARRAY[${values.join(', ')}]` };
+        }
+      }
+    } else { // Single value
+      if (!columnType.includes('[]')) { //single value non arraytype
+        //temperory fix 
+        if(isTempColumnPresent){
+          newCondition = { field: filterColumn, operator: '=', value: `'${value}'`  };
+         }
+        //temperory fix 
+        else if (isCharVarcharType) {
+          //normal varchar/char
+          newCondition = { field: filterColumn, operator: '=', value: `'${value}'` };
+        } else if (isTinySmallBigIntType) {
+          //normal shortint/tinyint/bigint
+          newCondition = { field: `${filterColumn}`, operator: '=', value: `${value}` };
+        } else {
+          //int,float,boolean etc
+          newCondition = { field: filterColumn, operator: '=', value: value };
+        }
+      } else {  //single value arraytype scalar
+         //temperory fix 
+         if(isTempColumnPresent){
+          newCondition = { field: filterColumn, operator: '@>', value: `'${value}'`  };
+         }
+        //temperory fix 
+        else if (isCharVarcharType) {
+          //normal varchar/char
+          newCondition = { field: filterColumn, operator: '@>', value: `'${value}'` };
+        } else if (isTinySmallBigIntType) {
+          //normal shortint/tinyint/bigint
+          newCondition = { field: `${filterColumn}`, operator: '@>', value: `'${value}'` };
+        } else {
+          newCondition = { field: filterColumn, operator: '@>', value: value };
+        }
+      }
+    }
+    console.log(newCondition)
+    const updatedConditions = [...conditions, newCondition];
+    setConditions(updatedConditions);
     setFilterColumn('');
     setValue('');
-    fetchRunCount(newCondition)
+    fetchRunCount(updatedConditions, xAxisMin, xAxisMax);
     setSuggestions([]);
   };
 
@@ -244,8 +441,18 @@ function Filters() {
       setXAxisMax(dates[1]);
     }
   };
+  function formatNumber(value) {
+    if (value >= 1e9) {
+      return (value / 1e9).toFixed(1) + 'Billion';
+    } else if (value >= 1e6) {
+      return (value / 1e6).toFixed(1) + 'Million';
+    } else if (value >= 1e3) {
+      return (value / 1e3).toFixed(1) + 'K';
+    } else {
+      return value.toString();
+    }
+  }
 
-  
   const handleDeleteCondition = (index) => {
     const updatedCondition = [...conditions];
     updatedCondition.splice(index, 1);
@@ -267,41 +474,41 @@ function Filters() {
     return `${date} ${timeWithSeconds}`;
   };
 
-  
+
   function convertToCustomFormat(formattedDate) {
     const months = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-    
-    if (!formattedDate){
-      
+
+    if (!formattedDate) {
+
       return
     }
     const [month, day, year, time] = formattedDate.split(/[ ,]+/);
     const [hour, minute] = time.split(':');
-    
+
     if (!month || !day || !year || !time || !hour || !minute) {
       throw new Error('Invalid formatted date string');
     }
-  
+
     const formattedMonth = months[month];
     const formattedDay = day.padStart(2, '0');
     const formattedHour = hour.padStart(2, '0');
     const formattedMinute = minute.padStart(2, '0');
-  
+
     return `${year}-${formattedMonth}-${formattedDay} ${formattedHour}:${formattedMinute}:00`;
   }
-const formattedDates = xvalues.map((timestamp) => {
-  const date = new Date(timestamp);
-  const options = {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    year: 'numeric',
-    hour12: false,
-    timeZone: 'GMT'
-  };
-  return new Intl.DateTimeFormat('en-US', options).format(date);
-});
+  const formattedDates = xvalues.map((timestamp) => {
+    const date = new Date(timestamp);
+    const options = {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      year: 'numeric',
+      hour12: false,
+      timeZone: 'GMT'
+    };
+    return new Intl.DateTimeFormat('en-US', options).format(date);
+  });
   const options = {
     chart: {
       type: 'area',
@@ -317,16 +524,18 @@ const formattedDates = xvalues.map((timestamp) => {
         text: 'Time',
       },
       events: {
-        afterSetExtremes: function(e) {
-          
-      const minIndex = Math.round(e.min);
-      const maxIndex = Math.round(e.max);
-      const maxXValue = convertToCustomFormat(formattedDates[minIndex]);
-      const minXValue = convertToCustomFormat(formattedDates[maxIndex]);     
-      setXAxisMin(minXValue);
-      setXAxisMax(maxXValue);
-      fetchData(minXValue,maxXValue);
-      fetchRunCount(conditions,minXValue,maxXValue);
+        afterSetExtremes: function (e) {
+          if (!initialColumnsLoaded) {
+            return;
+          }
+          const minIndex = Math.round(e.max);
+          const maxIndex = Math.round(e.min);
+          const maxXValue = convertToCustomFormat(formattedDates[minIndex]);
+          const minXValue = convertToCustomFormat(formattedDates[maxIndex]);
+          setXAxisMin(minXValue);
+          setXAxisMax(maxXValue);
+          fetchData(minXValue, maxXValue);
+          fetchRunCount(conditions, minXValue, maxXValue);
         }
       }
     },
@@ -337,7 +546,7 @@ const formattedDates = xvalues.map((timestamp) => {
     },
     credits: {
       enabled: false
-  },
+    },
     tooltip: {
       headerFormat: 'time: <b>{point.x}</b><br>',
       pointFormat: 'Count: <b>{point.y}</b><br>',
@@ -360,14 +569,26 @@ const formattedDates = xvalues.map((timestamp) => {
           },
         },
         threshold: null,
+        title: {
+          text: 'Time',
+        }
       },
     },
     series: [
       {
-        name: anames,
+        name: "Count",
         data: avalues,
       }
     ],
+    legend: {
+      align: 'right',
+      verticalAlign: 'top',
+      layout: 'vertical',
+      x: -10,
+      y: 25,
+      backgroundColor:
+        Highcharts.defaultOptions.legend.backgroundColor || '#FFFFFF'
+    },
     responsive: {
       rules: [
         {
@@ -385,7 +606,7 @@ const formattedDates = xvalues.map((timestamp) => {
       ],
     },
   };
-  
+
   useEffect(() => {
     if (!initialColumnsLoaded) {
       filtersColumn();
@@ -399,7 +620,7 @@ const formattedDates = xvalues.map((timestamp) => {
     // Handle selected values here
     console.log('Selected values:', values);
   };
-  
+
   const escapeOperandAttributeSelector = (operand) => {
     if (typeof operand !== 'string') {
       return operand;
@@ -407,223 +628,224 @@ const formattedDates = xvalues.map((timestamp) => {
     return operand.replace(/["\\]/g, '\\$&');
   };
 
- 
 
- 
+
+
   return (
     <div>
-      
+
       <Navbar />
-      <Grid container spacing={3}>
-        <Grid item xs={2} sx={{ overflowY: 'auto', maxHeight: '100vh',marginTop:'25px' }} >
+      <Grid container >
+        <Grid item xs={2} sx={{ overflowY: 'auto', maxHeight: '100vh', marginTop: '25px' }} >
           <div className="container-fluid">
             <div className="row">
               <div className="col-md-12">
-      
-                <Typography variant="p" className="card-header" style={{marginTop:'15px'}}>Add your filters here<IconButton onClick={toggleFilterDropDownDropdown}>
-          <ArrowDropDownIcon />
-        </IconButton></Typography>
+
+                <Typography variant="p" className="card-header" style={{ marginTop: '15px' }}>Add your filters here<IconButton onClick={toggleFilterDropDownDropdown}>
+                  <ArrowDropDownIcon />
+                </IconButton></Typography>
                 {showFilterDropDown && (
                   <>
-                 
-                <FormControl fullWidth style={{marginTop:'20px'}} required>
-                
-                  <InputLabel style={{marginTop:'-5px'}} htmlFor="filterColumn">Select a Column:</InputLabel>
-                  <Select
-                    id="filterColumn"
-                    value={filterColumn}
-                    onChange={handleFilterTableChange}
-                    required
-                  >
-                    { columns.map((column) => (
-                      <MenuItem key={column.id} value={column.column_name}>
-                        {column.column_name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-    id="value"
-    label="Value"
-    value={value}
-    onChange={handleValueChange}
-    fullWidth
-    required
-    style={{ marginTop: '10px' }}
-    InputProps={{
-        endAdornment: (
-            <Popper
-                open={!!suggestions.length}
-                anchorEl={document.getElementById('suggesstiontable')}
-                modifiers={{
-                    flip: {
-                        enabled: true,
-                    },
-                    offset: {
-                        enabled: true,
-                        offset: '0, 10', // adjust the offset as needed
-                    },
-                    preventOverflow: {
-                        enabled: true,
-                        boundariesElement: 'viewport',
-                    },
-                }}
-            >
-                
-            </Popper>
-        ),
-    }}
-/>
-<FormControl fullWidth style={{marginTop:'20px'}} required>
-<TextField
-  label="Select Start Date"
-  type="datetime-local"
-  value={xAxisMin}
-  onChange={(event) => {
-    const datetime = event.target.value;
-    setXAxisMin(formatDateTime(datetime));
-    fetchRunCount(null, datetime, xAxisMax);
-  }}
-  InputLabelProps={{
-    shrink: true,
-  }}
-  required
-/>
 
-</FormControl>
-<FormControl fullWidth style={{marginTop:'20px'}} required>
-<TextField
-  label="Select End Date"
-  type="datetime-local"
-  value={xAxisMax}
-  onChange={(event) => {
-    const datetime = event.target.value;
-    setXAxisMax(formatDateTime(datetime));
-    fetchRunCount(null, xAxisMin, datetime);
-  }}
-  InputLabelProps={{
-    shrink: true,
-  }}
-  required
-/>
+                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
 
-</FormControl>   
+                      <InputLabel style={{ marginTop: '-5px' }} htmlFor="filterColumn">Select a Column:</InputLabel>
+                      <Select
+                        id="filterColumn"
+                        value={filterColumn}
+                        onChange={handleFilterTableChange}
 
-                <Button onClick={addCondition} variant="contained" style={{marginTop:'20px'}}>Add</Button>
-                <Button onClick={fetchData} variant="contained"style={{marginTop:'20px',marginLeft:'20px'}}>Fetch Data</Button>
-                
-                </> )
-}
+                        required
+                      >
+                        {columns.map((column) => (
+                          <MenuItem key={column.id} value={column.column_name} style={{ whiteSpace: 'normal', wordBreak: 'break-word', width: '300px' }}>
+                            {column.column_name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      id="value"
+                      label="Value"
+                      value={value}
+                      onChange={handleValueChange}
+                      fullWidth
+                      required
+                      style={{ marginTop: '10px' }}
+                      InputProps={{
+                        endAdornment: (
+                          <Popper
+                            open={!!suggestions.length}
+                            anchorEl={document.getElementById('suggesstiontable')}
+                            modifiers={{
+                              flip: {
+                                enabled: true,
+                              },
+                              offset: {
+                                enabled: true,
+                                offset: '0, 10', // adjust the offset as needed
+                              },
+                              preventOverflow: {
+                                enabled: true,
+                                boundariesElement: 'viewport',
+                              },
+                            }}
+                          >
+
+                          </Popper>
+                        ),
+                      }}
+                    />
+                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
+                      <TextField
+                        label="Select Start Date"
+                        type="datetime-local"
+                        value={xAxisMin}
+                        onChange={(event) => {
+                          const datetime = formatDateTime(event.target.value);
+                          setXAxisMin(datetime);
+                          fetchRunCount(conditions, datetime, xAxisMax);
+                        }}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        required
+                      />
+
+                    </FormControl>
+                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
+                      <TextField
+                        label="Select End Date"
+                        type="datetime-local"
+                        value={xAxisMax}
+                        onChange={(event) => {
+                          const datetime = formatDateTime(event.target.value);
+                          setXAxisMax(datetime);
+                          fetchRunCount(conditions, xAxisMin, datetime);
+                        }}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        required
+                      />
+
+                    </FormControl>
+
+                    <Button onClick={addCondition} variant="contained" style={{ marginTop: '20px' }}>Add</Button>
+                    <Button onClick={fetchData} variant="contained" style={{ marginTop: '20px', marginLeft: '20px' }}>Fetch Data</Button>
+
+                  </>)
+                }
               </div>
 
-            </div> 
-            
-            <Typography variant="p" style={{marginTop:'25px'}} className="card-header">Filters Selected<IconButton onClick={toggleFilterSelecttedDropdown}>
-          <ArrowDropDownIcon />
-        </IconButton></Typography>
-        {showFilterSelected && (
-                  <>
-            <div className="row" style={{ marginTop: '20px', minHeight: '200px',maxHeight: '200px', overflowY: 'auto' }}>
-            
-    <div id="scrollable-table" className="col-md-12" style={{ width: '100%' }}>
-        
-        <table className="table scrollable-table">
-            <tbody>
-                {conditions.length === 0 ? (
-                    <tr style={{ marginTop: '20px' }}>
-                        <td colSpan="12" style={{ marginTop: '200px' }}>No filters selected</td>
-                    </tr>
-                ) : (
-                    conditions.map((condition, index) => (
-                        <tr key={index}>
-                            <td>{condition.field} : {condition.value.replace(/%/g, '')}</td>
-                            <td>
+            </div>
+
+            <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Filters Selected<IconButton onClick={toggleFilterSelecttedDropdown}>
+              <ArrowDropDownIcon />
+            </IconButton></Typography>
+            {showFilterSelected && (
+              <>
+                <div className="row" style={{ marginTop: '20px', minHeight: '200px', maxHeight: '200px', overflowY: 'auto' }}>
+
+                  <div id="scrollable-table" className="col-md-12" style={{ width: '100%' }}>
+
+                    <table className="table scrollable-table">
+                      <tbody>
+                        {conditions.length === 0 ? (
+                          <tr style={{ marginTop: '20px' }}>
+                            <td colSpan="12" style={{ marginTop: '200px' }}>No filters selected</td>
+                          </tr>
+                        ) : (
+                          conditions.map((condition, index) => (
+                            <tr key={index}>
+                              <td>{condition.field} {condition.operator} {condition.value}</td>
+                              <td>
                                 <Button
-                                    variant="contained"
-                                    color="error"
-                                    size="small"
-                                    onClick={() => setConditions(conditions.filter((_, i) => i !== index))}
+                                  variant="contained"
+                                  color="error"
+                                  size="small"
+                                  onClick={() => setConditions(conditions.filter((_, i) => i !== index))}
                                 >
-                                    Delete
+                                  Delete
                                 </Button>
-                            </td>
-                        </tr>
-                    ))
-                )}
-            </tbody>
-        </table>
-    </div>
-</div>
-</>)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>)}
           </div>
           <div>
-          <Typography variant="p" style={{marginTop:'25px'}} className="card-header">Count of Records<IconButton onClick={toggleCountDropdown}>
-          <ArrowDropDownIcon />
-        </IconButton></Typography>
-        {showcountPreview && (
-          <>
-            <h4>{runCountResult}</h4>
-          </>
-        )}
+            <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Count of Records<IconButton onClick={toggleCountDropdown}>
+              <ArrowDropDownIcon />
+            </IconButton></Typography>
+            {showcountPreview && (
+              <>
+                <h4>{runCountResult}</h4>
+              </>
+            )}
           </div>
           <div>
-          <Typography variant="p" style={{marginTop:'25px'}} className="card-header">Data Preview <IconButton onClick={toggleshowDataPreviewDropdown}>
-          <ArrowDropDownIcon />
-        </IconButton></Typography>        </div>
-        {showDataPreview && (
-                  <>
-          <div className="row" style={{ marginTop: '20px', minHeight: '200px',maxHeight: '300px', overflowX: 'auto' }}>
-         
-    <div id="scrollable-table" className="col-md-12" style={{ width: '100%' }}>
-        
-        <table className="suggesstiontable scrollable-table">
-            <tbody>
-            {suggestions.map((suggestion, index) => (
-                            <tr><td key={index} button onClick={() => setValue(suggestion)}>
-                                <ListItemText variant="p" primary={suggestion} />
-                            </td></tr>
-                        ))}
+            <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Data Preview <IconButton onClick={toggleshowDataPreviewDropdown}>
+              <ArrowDropDownIcon />
+            </IconButton></Typography>        </div>
+          {showDataPreview && (
+            <>
+              <div className="row" style={{ marginTop: '20px', minHeight: '200px', maxHeight: '300px', overflowX: 'auto' }}>
+
+                <div id="scrollable-table" className="col-md-12" style={{ width: '100%' }}>
+
+                  <table className="suggesstiontable scrollable-table">
+                    <tbody>
+                      {suggestions.map((suggestion, index) => (
+                        <tr><td key={index} button onClick={() => setValue(suggestion)}>
+                          <ListItemText variant="p" primary={suggestion} />
+                        </td></tr>
+                      ))}
                     </tbody>
-            </table>
-        </div>
-        
-        </div>
-        </>)}
-        <div className="row" style={{ marginTop: '20px', minHeight: '500px',maxHeight: '500px', overflowX: 'auto' }}>
-        <FormControl fullWidth style={{marginTop:'20px'}} required>
-                  <MultiSelectDropdown columns={columns} onChange={handleOnChangeDropDown} />
-                  </FormControl>
-        </div>
+                  </table>
+                </div>
+
+              </div>
+            </>)}
+          <div className="row" style={{ marginTop: '20px', minHeight: '500px', maxHeight: '500px', overflowX: 'auto' }}>
+            <FormControl fullWidth style={{ marginTop: '20px' }} required>
+              <MultiSelectDropdown columns={columns} onChange={handleOnChangeDropDown} />
+            </FormControl>
+          </div>
         </Grid>
         <Grid item xs={10}>
-       
-        {loading ? <CircularProgress size={50} />: null}
-        <HighchartsReact highcharts={Highcharts} options={options}/>
-        <DialogActions style={{ display: 'flex', justifyContent: 'space-between' }}>
-  {/* Other buttons */}
-  <div style={{ marginLeft: 'auto' }}>
-    <Button variant="contained" color="error" onClick={exportToExcel}  startIcon={<DownloadForOfflineIcon />}/>
-  </div>
-</DialogActions>
-        <div style={{ height: 400, width: '100%', overflowX: 'auto' }}>
-       
-  {loading2 ? <CircularProgress size={50} /> : null}
-  <DataGrid
-    rows={storedRows}
-    columns={escapedColumns}
-    pagination
-    pageSize={itemsPerPage}
-    rowCount={storedRows.length}
-    onPageChange={(page) => handlePageChange(page)}
-    paginationMode="client"
-    sortingMode="client"
-    components={{
-      Toolbar: GridToolbar,
-    }}
-  />
-  
-</div>
-          
+
+          {loading ? <CircularProgress size={50} /> : null}
+          <HighchartsReact highcharts={Highcharts} options={options} />
+          <DialogActions style={{ display: 'flex', justifyContent: 'space-between' }}>
+            {/* Other buttons */}
+            <div style={{ marginLeft: 'auto' }}>
+              <Button variant="contained" color="error" onClick={exportToExcel} startIcon={<DownloadForOfflineIcon />} />
+            </div>
+          </DialogActions>
+          <div style={{ height: 400, width: '100%', overflowX: 'auto' }}>
+
+            {loading2 ? <CircularProgress size={50} /> : null}
+            <DataGrid
+              rows={storedRows}
+              columns={escapedColumns}
+              pagination
+              pageSize={itemsPerPage}
+              rowCount={storedRows.length}
+              onPageChange={(page) => handlePageChange(page)}
+              paginationMode="client"
+              sortingMode="client"
+              components={{
+                Toolbar: GridToolbar,
+              }}
+            />
+
+          </div>
+
         </Grid>
       </Grid>
       <Footer />

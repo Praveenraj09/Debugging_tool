@@ -4,9 +4,9 @@ import { DataGrid } from '@mui/x-data-grid';
 import { Grid, Typography, CircularProgress, FormControl, InputLabel,TextField, Select, MenuItem, Button } from '@mui/material';
 import Navbar from './Navbar';
 import Footer from './Footer';
+import * as XLSX from 'xlsx';
+import DownloadForOfflineIcon from '@mui/icons-material/DownloadForOffline';
 
-import Highcharts from 'highcharts';
-import HighchartsReact from 'highcharts-react-official';
 function Tables() {
   const [loading, setLoading] = useState(true);
   const [tables, setTables] = useState([]);
@@ -32,10 +32,7 @@ function Tables() {
     const response = await axios.post('/tables', {  filterTable: selectedTable, filterSelect  });
     
     setColumns(response.data.columns);
-    const updatedRows = response.data.result.map((table, index) => ({
-      ...table,
-      id: index + 1,
-    }));
+    const updatedRows = response.data.result;
 console.log(updatedRows)
     setResults(updatedRows);
     setLoading(false);
@@ -48,11 +45,17 @@ console.log(updatedRows)
   };
   const escapedColumns = columns.map((column) => ({
 
-    field:  String(escapeOperandAttributeSelector(column)),
-    headerName: String(escapeOperandAttributeSelector(column)),
+    field:  String(escapeOperandAttributeSelector(column.column_name)),
+    headerName: String(escapeOperandAttributeSelector(column.column_name)),
     sortable: true,
     width: 250,
   }));
+  const exportToExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(results);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data');
+    XLSX.writeFile(workbook, 'Sample_data_'+selectedTable+'.xlsx');
+  };
   const handleTableChange = (event) => {
     setSelectedTable(event.target.value);
   };
@@ -104,7 +107,9 @@ console.log(updatedRows)
          
         </Grid>
         <Grid item xs={10}>
-        
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+  <Button variant="contained" color="error" onClick={exportToExcel} startIcon={<DownloadForOfflineIcon />}>Download Sample Data</Button>
+</div>
           <div style={{ height: 400, width: '100%' }}>
           <div style={{ height: 700, width: '100%' }}>
   {loading ? (
