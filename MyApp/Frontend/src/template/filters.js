@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo,useRef } from 'react';
 import axios from 'axios';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Container, Grid, Typography, IconButton, Paper, Popper, Table, TableHead, TableRow, TableCell, TableBody, CardContent, CircularProgress, List, ListItem, ListItemText, CardHeader, FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
@@ -14,12 +14,13 @@ import 'react-datepicker/dist/react-datepicker.css';
 import MultiSelectDropdown from './MultiSelectDropDown';
 import { format, subDays } from 'date-fns';
 import * as XLSX from 'xlsx';
-
+import { styled } from '@mui/material/styles';
 function Filters() {
   const [conditions, setConditions] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
   const [value, setValue] = useState('');
   const [filterColumn, setFilterColumn] = useState('');
+  const [filterselectedColumn, setFilterSelectedColumn] = useState('');
   const [columns, setColumns] = useState([]);
   const [selectedcolumns, setSelectedcolumns] = useState([]);
   const [xvalues, setXvalues] = useState([]);
@@ -36,11 +37,13 @@ function Filters() {
   const [showFilterDropDown, setShowFilterDropDown] = useState(false);
   const [showFilterSelected, setShowFilterSelected] = useState(false);
   const [showDataPreview, setShowDataPreview] = useState(false);
+  const [showColumnPreview, setShowColumnPreview] = useState(false);
   const [showcountPreview, setShowcountPreview] = useState(false);
   const [runCountResult, setRunCountResult] = useState('Fetching...');
   const [open, setOpen] = useState(false);
   const [selectedValues, setSelectedValues] = useState([]);
   const [initialColumnsLoaded, setInitialColumnsLoaded] = useState(false); // Track initial columns load
+  const [disableButton,setDisableButton] = useState(false);
   function formatDateToUS(dateObject) {
     return dateObject.toLocaleString('en-US', {
       year: 'numeric',
@@ -66,7 +69,10 @@ function Filters() {
   const toggleshowDataPreviewDropdown = () => {
     setShowDataPreview(prevState => !prevState);
   };
-
+  const toggleshowColumnSelectDropdown = () => {
+    setShowColumnPreview(prevState => !prevState);
+  };
+  
   const toggleCountDropdown = () => {
     setShowcountPreview(prevState => !prevState);
   };
@@ -95,38 +101,61 @@ function Filters() {
   };
   const filtersColumn = async () => {
     setLoading(true);
+    setLoading2(true);
+    
     try {
       const response = await axios.get('/columns');
       setColumns(response.data);
     } catch (error) {
       console.error('Error fetching columns:', error);
       setLoading(false);
-    }
-  };
-  const fetchFilterTable = async () => {
-    setLoading(true);
-    try {
-      const response = await axios.post('/filter_table', { params: payload });
-      const data = response.data;
-      setSelectedcolumns(data.columns);
-      setAnames(data.filters.a_names);
-      setRunCountResult(`Results for selected criteria is: ${formatNumber(data.runCount[0]["counts"])} records`);
+      setLoading2(false);
+      isInitialMount.current = false;
+    }finally{
       setLoading(false);
-      setOpen(true);
-    } catch (error) {
-      console.error('Error fetching filter table:', error);
-      setLoading(false);
+      setLoading2(false);
+      
+      isInitialMount.current = false;
     }
   };
 
   const fetchFilters = async () => {
     setLoading(true);
+
+    if (!xAxisMin || !xAxisMax) {
+      alert("Please provide start and end date.");
+      setLoading(false);
+      return;
+    }
+if (xAxisMin >= xAxisMax) {
+    alert("Start date must be earlier than end date.");
+    setLoading(false);
+    return;
+  }
+    setLoading(true);
+    setDisableButton(true);
     try {
-      const response = await axios.get('/filters');
+      const conditionString = conditions.map(condition => {
+
+        return `(${condition.field} ${condition.operator} ${condition.value})`;
+
+      }).join(' AND ');
+      const fetchPayload = {
+        conditions: conditionString,
+        columns: selectedValues,
+        page: currentPage,
+        minTime: xAxisMin,
+        maxTime: xAxisMax,
+        itemsPerPage
+      };
+      const response = await axios.post('/filters',fetchPayload);
       const data = response.data;
       setXvalues(data.x_values);
       setAvalues(data.a_values);
       setAnames(data.a_names);
+      console.log("filters")
+      fetchData(xAxisMin, xAxisMax);
+      fetchRunCount(conditions, xAxisMin, xAxisMax);
     } catch (error) {
       console.error('Error fetching filters:', error);
     } finally {
@@ -134,7 +163,8 @@ function Filters() {
     }
   };
 
-  const fetchData = async () => {
+  const fetchData =  async () => {
+    setDisableButton(true);
     setLoading2(true);
     try {
       const conditionString = conditions.map(condition => {
@@ -159,12 +189,13 @@ function Filters() {
       const startIdx = (currentPage - 1) * itemsPerPage;
       const endIdx = currentPage * itemsPerPage;
       setSelectedRows(formattedData.slice(startIdx, endIdx));
-      fetchRunCount(conditions, xAxisMin, xAxisMax);
+      //fetchRunCount(conditions, xAxisMin, xAxisMax);
 
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading2(false);
+      setDisableButton(false);
     }
   };
   const renderConditionValue = (condition) => {
@@ -172,7 +203,7 @@ function Filters() {
   }
 
 
-  const fetchRunCount = async (conditions, xAxisMin, xAxisMax) => {
+  const fetchRunCount =  async (conditions, xAxisMin, xAxisMax) => {
     setRunCountResult('Fetching...');
     try {
       let conditionString = '';
@@ -201,27 +232,58 @@ function Filters() {
 
   const handlePageChange = (page) => setCurrentPage(page);
 
+  // const handleFilterTableChange = (e) => {
+  //   setFilterSelectedColumn(e.target.value);
+  //   const selectedColumnValues = storedRows.map((row) => row[e.target.value]);
+  //   const uniqueValues = Array.from(new Set(selectedColumnValues)).filter(value => {
+  //     if (value !== null && value !== undefined) {
+  //       if (typeof value === 'string') {         
+  //         return value.trim() !== '';
+  //       } else if (Array.isArray(value)) {
+  //         console.log("array")
+  //         return value.length > 0 && value.some(item => item !== null && item !== undefined && typeof item === 'string' && item.trim() !== '');
+  //       }
+  //       return true;
+  //     }
+  //     return false;
+  //   });
+  //   setSuggestions(uniqueValues);
+  // };
   const handleFilterTableChange = (e) => {
-    setFilterColumn(e.target.value);
+    setFilterSelectedColumn(e.target.value);
     const selectedColumnValues = storedRows.map((row) => row[e.target.value]);
-    const uniqueValues = Array.from(new Set(selectedColumnValues)).filter(value => {
-      if (value !== null && value !== undefined) {
-        if (typeof value === 'string') {
-          return value.trim() !== '';
-        } else if (Array.isArray(value)) {
-          return value.length > 0 && value.some(item => item !== null && item !== undefined && typeof item === 'string' && item.trim() !== '');
+  
+    const processValue = (value) => {
+      if (typeof value === 'string') {
+        // Remove curly braces, quotes, and square brackets
+        value = value.replace(/[{}"\[\]]/g, '');
+  
+        // If it contains commas, split into individual values
+        if (value.includes(',')) {
+          return value.split(',').map(val => val.trim()).filter(val => val !== '');
         }
-        return true;
       }
-      return false;
-    });
+      return value.trim() !== '' ? value : null;
+    };
+  
+    const uniqueValues = Array.from(
+      new Set(
+        selectedColumnValues.flatMap(value => {
+          const processed = processValue(value);
+          return Array.isArray(processed) ? processed : [processed];
+        })
+      )
+    ).filter(value => value !== null && value !== undefined);
+  
+    // Sort the unique values
+    uniqueValues.sort();
+  
     setSuggestions(uniqueValues);
   };
-
+  
+  
   const handleValueChange = (e) => {
     const typedText = e.target.value.trim().toLowerCase();
-    const filteredSuggestions = suggestions.filter((suggestion) => suggestion.toLowerCase().includes(typedText));
-    setSuggestions(filteredSuggestions);
     setValue(e.target.value);
   };
   const getColumnType = (columnName) => {
@@ -258,7 +320,7 @@ function Filters() {
       return;
     }
     const charVarcharTypes = ['char', 'varchar','ipv'];
-    const tinyintTypes = ['tinyint',  'smallint'];
+    const tinyintTypes = ['tinyint', 'smallint'];
     const columnType = getColumnType(filterColumn).toLowerCase();
     const isCharVarcharType = charVarcharTypes.some(type => columnType.includes(type));
     const isTinySmallBigIntType = tinyintTypes.some(type => columnType.includes(type));
@@ -418,8 +480,8 @@ function Filters() {
     setConditions(updatedConditions);
     setFilterColumn('');
     setValue('');
-    fetchRunCount(updatedConditions, xAxisMin, xAxisMax);
-    setSuggestions([]);
+    //fetchRunCount(updatedConditions, xAxisMin, xAxisMax);
+    //setSuggestions([]);
   };
 
   const validateInput = () => {
@@ -432,15 +494,7 @@ function Filters() {
     setConditions(updatedCondition);
   };
 
-  const handleDateChange = (dates) => {
-    if (dates === null) {
-      setXAxisMin(null);
-      setXAxisMax(null);
-    } else {
-      setXAxisMin(dates[0]);
-      setXAxisMax(dates[1]);
-    }
-  };
+ 
   function formatNumber(value) {
     if (value >= 1e9) {
       return (value / 1e9).toFixed(1) + 'Billion';
@@ -467,10 +521,10 @@ function Filters() {
   }));
 
   const formatDateTime = (datetime) => {
-    // Split the datetime string into date and time parts
     const [date, time] = datetime.split('T');
     // Ensure the time includes seconds set to 00
     const timeWithSeconds = `${time}:00`;
+    console.log(date)
     return `${date} ${timeWithSeconds}`;
   };
 
@@ -515,7 +569,7 @@ function Filters() {
       zoomType: 'x',
     },
     title: {
-      text: 'Time/Count Chart',
+      text: 'Record Frequency by 5-Minute Interval',
     },
     xAxis: {
       categories: formattedDates,
@@ -525,17 +579,18 @@ function Filters() {
       },
       events: {
         afterSetExtremes: function (e) {
-          if (!initialColumnsLoaded) {
-            return;
-          }
+         
           const minIndex = Math.round(e.max);
           const maxIndex = Math.round(e.min);
           const maxXValue = convertToCustomFormat(formattedDates[minIndex]);
           const minXValue = convertToCustomFormat(formattedDates[maxIndex]);
           setXAxisMin(minXValue);
           setXAxisMax(maxXValue);
+         if(!isInitialMount.current){
+          console.log("charts")
           fetchData(minXValue, maxXValue);
           fetchRunCount(conditions, minXValue, maxXValue);
+         }
         }
       }
     },
@@ -606,14 +661,22 @@ function Filters() {
       ],
     },
   };
-
+  const isInitialMount = useRef(true);
   useEffect(() => {
-    if (!initialColumnsLoaded) {
+    if (isInitialMount.current) {
+      
+     // const yesterday = subDays(new Date(), 1);
+     // const defaultDateTime =  format(yesterday, "yyyy-MM-dd'T'HH:mm");
+     // setXAxisMin(defaultDateTime);
+      console.log(xAxisMin);
+ 
       filtersColumn();
-      fetchFilters();
-      setInitialColumnsLoaded(true);// Only fetch columns if they haven't been fetched already
+
+      
+      
+     // fetchFilters();
     }
-  }, [initialColumnsLoaded]);
+  }, []);
 
   const handleOnChangeDropDown = (values) => {
     setSelectedValues(values);
@@ -628,7 +691,9 @@ function Filters() {
     return operand.replace(/["\\]/g, '\\$&');
   };
 
-
+  const WhiteIconButton = styled(IconButton)(({ theme }) => ({
+    color: theme.palette.common.white,
+  }));
 
 
   return (
@@ -639,22 +704,59 @@ function Filters() {
         <Grid item xs={2} sx={{ overflowY: 'auto', maxHeight: '100vh', marginTop: '25px' }} >
           <div className="container-fluid">
             <div className="row">
+            
               <div className="col-md-12">
-
-                <Typography variant="p" className="card-header" style={{ marginTop: '15px' }}>Add your filters here<IconButton onClick={toggleFilterDropDownDropdown}>
+              
+                <Typography variant="p" className="card-header" style={{ marginTop: '15px' }}>Apply your Filters<WhiteIconButton onClick={toggleFilterDropDownDropdown}>
                   <ArrowDropDownIcon />
-                </IconButton></Typography>
+                </WhiteIconButton></Typography>
                 {showFilterDropDown && (
                   <>
+                  <div className="col-md-12">
+                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
+                      <TextField
+                        label="Select Start Date (UTC)"
+                        type="datetime-local"
+                        value={xAxisMin}
+                        timezone="America/New_York"
+                        onChange={(event) => {
+                          const datetime = formatDateTime(event.target.value);
+                          setXAxisMin(datetime);                         
+                        }}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        required
+                      />
 
+                    </FormControl></div><div className="col-md-12">
+                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
+                      <TextField
+                        label="Select End Date (UTC)"
+                        type="datetime-local"
+                        value={xAxisMax}
+                        timezone="America/New_York"
+                        onChange={(event) => {
+                          const datetime = formatDateTime(event.target.value);
+                          setXAxisMax(datetime);
+                          //fetchRunCount(conditions, xAxisMin, datetime);
+                        }}
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
+                        required
+                      />
+
+                    </FormControl>
+                    </div>
+<div className="col-md-12">
                     <FormControl fullWidth style={{ marginTop: '20px' }} required>
 
                       <InputLabel style={{ marginTop: '-5px' }} htmlFor="filterColumn">Select a Column:</InputLabel>
                       <Select
                         id="filterColumn"
                         value={filterColumn}
-                        onChange={handleFilterTableChange}
-
+                        onChange={(e) => setFilterColumn(e.target.value)}
                         required
                       >
                         {columns.map((column) => (
@@ -663,7 +765,7 @@ function Filters() {
                           </MenuItem>
                         ))}
                       </Select>
-                    </FormControl>
+                    </FormControl></div><div className="col-md-12">
                     <TextField
                       id="value"
                       label="Value"
@@ -695,44 +797,15 @@ function Filters() {
                           </Popper>
                         ),
                       }}
-                    />
-                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
-                      <TextField
-                        label="Select Start Date"
-                        type="datetime-local"
-                        value={xAxisMin}
-                        onChange={(event) => {
-                          const datetime = formatDateTime(event.target.value);
-                          setXAxisMin(datetime);
-                          fetchRunCount(conditions, datetime, xAxisMax);
-                        }}
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                        required
-                      />
-
-                    </FormControl>
-                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
-                      <TextField
-                        label="Select End Date"
-                        type="datetime-local"
-                        value={xAxisMax}
-                        onChange={(event) => {
-                          const datetime = formatDateTime(event.target.value);
-                          setXAxisMax(datetime);
-                          fetchRunCount(conditions, xAxisMin, datetime);
-                        }}
-                        InputLabelProps={{
-                          shrink: true,
-                        }}
-                        required
-                      />
-
-                    </FormControl>
-
-                    <Button onClick={addCondition} variant="contained" style={{ marginTop: '20px' }}>Add</Button>
-                    <Button onClick={fetchData} variant="contained" style={{ marginTop: '20px', marginLeft: '20px' }}>Fetch Data</Button>
+                    /></div>
+                    <div className="col-md-12" style={{ display: 'flex', marginTop: '20px' }}>
+  <div style={{ flex: 1, paddingRight: '10px' }}>
+    <Button onClick={addCondition} variant="contained" fullWidth>Add</Button>
+  </div>
+  <div style={{ flex: 1, paddingLeft: '10px' }}>
+    <Button onClick={fetchFilters} variant="contained" fullWidth disabled={disableButton}>Run</Button>
+  </div>
+</div>
 
                   </>)
                 }
@@ -740,9 +813,9 @@ function Filters() {
 
             </div>
 
-            <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Filters Selected<IconButton onClick={toggleFilterSelecttedDropdown}>
+            <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Active Filters<WhiteIconButton onClick={toggleFilterSelecttedDropdown}>
               <ArrowDropDownIcon />
-            </IconButton></Typography>
+            </WhiteIconButton></Typography>
             {showFilterSelected && (
               <>
                 <div className="row" style={{ marginTop: '20px', minHeight: '200px', maxHeight: '200px', overflowY: 'auto' }}>
@@ -753,7 +826,7 @@ function Filters() {
                       <tbody>
                         {conditions.length === 0 ? (
                           <tr style={{ marginTop: '20px' }}>
-                            <td colSpan="12" style={{ marginTop: '200px' }}>No filters selected</td>
+                            <td colSpan="12" style={{ marginTop: '200px' }}>No Active Filters</td>
                           </tr>
                         ) : (
                           conditions.map((condition, index) => (
@@ -777,25 +850,55 @@ function Filters() {
                   </div>
                 </div>
               </>)}
-          </div>
-          <div>
-            <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Count of Records<IconButton onClick={toggleCountDropdown}>
+          
+          
+          <div >
+            <Typography variant="p" style={{ marginTop: '30px' }} className="card-header">Count of Records<WhiteIconButton onClick={toggleCountDropdown}>
               <ArrowDropDownIcon />
-            </IconButton></Typography>
+            </WhiteIconButton></Typography>
+            
             {showcountPreview && (
               <>
                 <h4>{runCountResult}</h4>
               </>
             )}
           </div>
-          <div>
-            <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Data Preview <IconButton onClick={toggleshowDataPreviewDropdown}>
+          
+          <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Choose Column to display<WhiteIconButton onClick={toggleshowColumnSelectDropdown} >
               <ArrowDropDownIcon />
-            </IconButton></Typography>        </div>
+            </WhiteIconButton></Typography>
+            <div className="row" style={{ marginTop: '15px', minHeight: '100px', maxHeight: '200px', overflowX: 'auto' }}>
+            
+              <FormControl fullWidth style={{ marginTop: '20px' }} required>
+              <MultiSelectDropdown columns={columns} onChange={handleOnChangeDropDown} />
+            </FormControl>
+            
+            
+          </div>
+          
+            <Typography variant="p" style={{ marginTop: '1px' }} className="card-header">Distinct Values Check<WhiteIconButton onClick={toggleshowDataPreviewDropdown}>
+              <ArrowDropDownIcon />
+            </WhiteIconButton></Typography>   <div className="row" style={{ marginTop: '20px', minHeight: '400px', maxHeight: '500px', overflowX: 'auto' }}>    
           {showDataPreview && (
             <>
-              <div className="row" style={{ marginTop: '20px', minHeight: '200px', maxHeight: '300px', overflowX: 'auto' }}>
+              <div >
+              <FormControl fullWidth style={{ marginTop: '20px' }} required>
 
+                      <InputLabel style={{ marginTop: '-5px' }} htmlFor="filterselectedColumn">Select a Column to check distinct value:</InputLabel>
+                      <Select
+                        id="filterselectedColumn"
+                        value={filterselectedColumn}
+                        onChange={handleFilterTableChange}
+
+                        required
+                      >{selectedcolumns.map((column) => (
+                        <MenuItem key={column.id} value={column.column_name} style={{ whiteSpace: 'normal', wordBreak: 'break-word', width: '300px' }}>
+                          {column.column_name}
+                        </MenuItem>
+                      ))}
+                      </Select>
+                </FormControl>
+                </div><div>
                 <div id="scrollable-table" className="col-md-12" style={{ width: '100%' }}>
 
                   <table className="suggesstiontable scrollable-table">
@@ -810,12 +913,10 @@ function Filters() {
                 </div>
 
               </div>
+              
             </>)}
-          <div className="row" style={{ marginTop: '20px', minHeight: '500px', maxHeight: '500px', overflowX: 'auto' }}>
-            <FormControl fullWidth style={{ marginTop: '20px' }} required>
-              <MultiSelectDropdown columns={columns} onChange={handleOnChangeDropDown} />
-            </FormControl>
-          </div>
+            </div>
+            </div>
         </Grid>
         <Grid item xs={10}>
 

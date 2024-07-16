@@ -27,14 +27,16 @@ const MultiSelectDropdown = ({ columns, onChange }) => {
         />
       )}
       renderOption={(props, option, { selected }) => (
-        <li {...props}>
+        <li {...props} style={{ whiteSpace: 'normal', wordBreak: 'break-word', width: '300px' }}>
           <Checkbox
             sx={{ marginRight: 2 }}
             checked={selected}
+            
           />
           {option}
         </li>
       )}
+      
     />
   );
 };

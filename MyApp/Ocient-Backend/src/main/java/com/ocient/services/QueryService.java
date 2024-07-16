@@ -107,10 +107,15 @@ public class QueryService {
 
 	public Map<String, Object> getTableData(Map<String, Object> payload) {
 		String selectedTable = (String) payload.get("filterTable");
-		int selectedLimit = (Integer) payload.get("filterSelect");
-		if (selectedLimit == 0)
-			selectedLimit = 10;
 
+		System.out.println(payload.toString()+" "+selectedTable+" ");
+		String selectedLimit = (String) payload.get("filterSelect");
+
+		System.out.println(payload.toString()+" "+selectedTable+" "+selectedLimit);
+		if (selectedLimit == null)
+			selectedLimit = "10";
+		
+		System.out.println(payload.toString()+" "+selectedTable+" "+selectedLimit);
 		List<Map<String, Object>> columns;
 		String query = "SELECT column_name FROM information_schema.columns WHERE table_name = '" + selectedTable + "'";
 		columns = runQuery(query);
@@ -210,12 +215,46 @@ public class QueryService {
 	public Map<String, Object> getFilters(Map<String, Object> payload) {
 		String timeColumns = (String) payload.getOrDefault("timeColumn", timeColumn);
 		String viewTables = (String) payload.getOrDefault("viewTable", viewTable);
+		// Handle null or default values for minTime and maxTime if needed
+				String minTime = (String) payload.get("minTime");
+				String maxTime = (String) payload.get("maxTime");
 
-		String query = String.format(
-				"SELECT DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) AS time_range_start, "
-						+ "DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) + INTERVAL '5 minute' AS time_range_end, "
-						+ "COUNT(*) AS record_count FROM %s.%s GROUP BY time_range_start, time_range_end ORDER BY time_range_start DESC LIMIT %d",
-				timeColumns, timeColumns,chart_frequncy, timeColumns, timeColumns,chart_frequncy, schema, viewTables, chart_points);
+				// Default to current date if maxTime is null
+				if (maxTime == null) {
+					maxTime = ConvertionFunction.convertDate(new Date());
+				}
+
+				// Default to previous day's date if minTime is null
+				if (minTime == null) {
+					Calendar calendar = Calendar.getInstance();
+					calendar.add(Calendar.DAY_OF_MONTH, -1);
+					Date previousDate = calendar.getTime();
+					minTime = ConvertionFunction.convertDate(previousDate);
+				}
+
+				// Get conditions, defaulting to an empty string if null
+				String conditions = (String) payload.getOrDefault("conditions", "");
+				
+				String query = "";
+				if(joinRequired) {
+					query+="SELECT DATE_TRUNC('minute', "+ viewTables+"."+timeColumn+") - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM "+ viewTables+"."+timeColumn+")::INT % "+chart_frequncy+") "
+							+ " AS time_range_start, "
+							+ " DATE_TRUNC('minute', "+ viewTables+"."+timeColumn+") - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM "+ viewTables+"."+timeColumn+")::INT % "+chart_frequncy+") + "
+							+ " INTERVAL '"+chart_frequncy+" minute' AS time_range_end, "
+							+ " COUNT(*) AS record_count FROM "+schema+"."+ viewTables+" INNER JOIN "+schema+"."+joinTable1+" ON "+ viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" "
+							+ " WHERE "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"'  AND "
+							+ " "+joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+joinTable1+"."+timeColumn+" <= '"+maxTime+"' "
+							+ " "+(!conditions.isBlank() ? "AND " + conditions : "") +" "
+							+ " GROUP BY time_range_start, time_range_end ORDER BY time_range_start DESC LIMIT "+chart_points;
+				}
+				else {
+					query += String.format(
+							"SELECT DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) AS time_range_start, "
+									+ "DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) + INTERVAL '5 minute' AS time_range_end, "
+									+ "COUNT(*) AS record_count FROM %s.%s GROUP BY time_range_start, time_range_end ORDER BY time_range_start DESC LIMIT %d",
+							timeColumns, timeColumns,chart_frequncy, timeColumns, timeColumns,chart_frequncy, schema, viewTables, chart_points);
+					
+				}
 		List<Map<String, Object>> data = runQuery(query);
 
 		List<String> xValues = new ArrayList<>();
@@ -426,14 +465,18 @@ public class QueryService {
 				Map<String, Object> row = new HashMap<>(columnCount);
 				for (String columnName : columnNames) {
 					//convert the arrayObject data to list
-					Object obj = rs.getObject(columnName);
+					Object obj = rs.getObject(columnName);					
 					if(null==obj) {
 						row.put(columnName, "NULL");
 					}
 					else if(obj.getClass().toString().contains("XGArray")) {
 						row.put(columnName, rs.getObject(columnName).toString());
 						
-					}else {
+					}
+					else if(obj.getClass().toString().contains("class [B")) {
+						row.put(columnName, convertToHex(rs.getObject(columnName).toString()));
+					}
+					else {
 						row.put(columnName, rs.getObject(columnName));
 					}
 					
@@ -453,7 +496,18 @@ public class QueryService {
 
 		return result;
 	}
-
+	public static String convertToHex(Object rawValue) {
+        if (rawValue instanceof String) {
+            String rawString = (String) rawValue;
+            // Convert the string to hexadecimal format
+            StringBuilder hexString = new StringBuilder("0x");
+            for (char ch : rawString.toCharArray()) {
+                hexString.append(String.format("%02x", (int) ch));
+            }
+            return hexString.toString();
+        }
+        return rawValue.toString();
+    }
 	public List<Map<String, Object>> getTablefromDB() {
 		String q_tables = "SELECT table_name as tablename FROM information_schema.tables where table_schema = '"
 				+ schema + "'";

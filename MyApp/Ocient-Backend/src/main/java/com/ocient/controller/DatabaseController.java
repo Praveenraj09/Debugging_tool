@@ -75,10 +75,10 @@ public class DatabaseController {
 		return queryService.getColumns();
 	}
 
-	@GetMapping("/filters")
-	public Map<String, Object> getFilters() {
+	@PostMapping("/filters")
+	public Map<String, Object> getFilters(@RequestBody Map<String, Object> payload) {
 		System.out.println("calling /filters");
-		Map<String, Object> payload = new HashMap<String, Object>();		
+				
 		return queryService.getFilters(payload);
 	}
 
@@ -130,14 +130,6 @@ public class DatabaseController {
 	       return queryService.filterTable(payload);
 	    }
 	
-	@GetMapping("/logout")
-	public Map<String, String> logout(HttpServletRequest request, HttpServletResponse response) {
-		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-		if (auth != null) {
-			new SecurityContextLogoutHandler().logout(request, response, auth);
-		}
-		return Map.of("redirect", "/login");
-	}
 	
 	
     @GetMapping("/report")
