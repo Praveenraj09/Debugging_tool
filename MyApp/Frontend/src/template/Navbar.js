@@ -12,7 +12,7 @@ function Navbar() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [reportOptions,setReportOptions] = useState(['Report'])
   useEffect(() => {
-    axios.get('/report')
+    axios.get('/api/report')
       .then(response => {
         setReportOptions(response.data);
       })
@@ -34,7 +34,7 @@ function Navbar() {
   }
   const handleLogout = async () => {
     try {
-      await axios.post('/logout');
+      await axios.post('/api/logout');
       localStorage.removeItem('authToken');
       navigate('/login');
     } catch (error) {

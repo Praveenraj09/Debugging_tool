@@ -6,10 +6,8 @@ import org.springframework.core.env.Environment;
 
 import javax.annotation.PostConstruct;
 
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Configuration
 public class ReportConfig {

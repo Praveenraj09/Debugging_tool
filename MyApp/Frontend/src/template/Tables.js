@@ -16,8 +16,8 @@ function Tables() {
   const [results,setResults] = useState([]);
   const [filterSelect, setFilterSelect] = useState(500);
   useEffect(() => {
-    async function fetchData() {
-      const response = await axios.get('/tables');
+    async function fetchDatas() {
+      const response = await axios.get('/api/tables');
       const data = response.data;
       const tableNames = response.data.map(item => item.table_name);
       console.log(tableNames)
@@ -25,15 +25,21 @@ function Tables() {
       setLoading(false);
       
       }
-    fetchData();
+    fetchDatas();
   }, []);
   const fetchData = async () => {
     setLoading(true);
-    const response = await axios.post('/tables', {  filterTable: selectedTable, filterSelect  });
+    const payload = {
+      method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+       filterTable: selectedTable, 
+       filterSelect: filterSelect.toString()
+    }
+    const response = await axios.post('/api/tables', payload);
     
     setColumns(response.data.columns);
     const updatedRows = response.data.result;
-console.log(updatedRows)
+    console.log(updatedRows)
     setResults(updatedRows);
     setLoading(false);
   }

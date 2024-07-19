@@ -21,7 +21,7 @@ function Dashboard() {
     fetchTableInfo();
   }, []);
   const fetchData = async()=>{
-    const response = await axios.get('/dashboard');
+    const response = await axios.get('/api/dashboard');
     const data = response.data;
     setSchemacount(data.schemacount);
     setCounts(data.counts);
@@ -31,7 +31,7 @@ function Dashboard() {
   }
   const fetchTableInfo = async () => {
     try {
-      const response = await axios.get('/fetch_TableInfo');
+      const response = await axios.get('/api/fetch_TableInfo');
       console.log(response.data.columnName)
       const data = response.data.data;
       const columns = response.data.columnName;

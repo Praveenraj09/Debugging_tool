@@ -2,27 +2,17 @@ package com.ocient.services;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.GetMapping;
-
 import com.ocient.config.DatabaseConnection;
 import com.ocient.config.ReportConfig;
-import com.ocient.jdbc.XGTimestamp;
 import com.ocient.pojofunction.ConvertionFunction;
-import com.univocity.parsers.conversions.DateConversion;
-
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import javax.annotation.PostConstruct;
 
 @Service
 public class QueryService {
@@ -33,9 +23,7 @@ public class QueryService {
 
 	private static final String q_fetchdashboard_table = "select distinct country_name as Country_Name,count(*) as counts from chicago.ip2location  group by country_name order by counts desc";
 
-	@Autowired
-	private JdbcTemplate jdbcTemplate;
-
+	
 	@Autowired
 	DatabaseConnection connection;
 
@@ -80,6 +68,9 @@ public class QueryService {
 
 	@Value("${ocient.db.viewable_primaryId}")
 	private String viewable_primaryId;
+	
+	@Value("${ocient.db.defaultcolumn}")
+	private String default_column;
 
 
 
@@ -108,10 +99,10 @@ public class QueryService {
 	public Map<String, Object> getTableData(Map<String, Object> payload) {
 		String selectedTable = (String) payload.get("filterTable");
 
-		System.out.println(payload.toString()+" "+selectedTable+" ");
-		String selectedLimit = (String) payload.get("filterSelect");
+		System.out.println(payload.toString()+" "+selectedTable+" "+payload.get("filterSelect"));
+		String selectedLimit = payload.get("filterSelect").toString();
 
-		System.out.println(payload.toString()+" "+selectedTable+" "+selectedLimit);
+		
 		if (selectedLimit == null)
 			selectedLimit = "10";
 		
@@ -129,8 +120,7 @@ public class QueryService {
 		String columnSelect = columns.stream().map(col -> col.get("column_name").toString())
 				.reduce((col1, col2) -> col1 + ", " + col2).orElse("*");
 
-		query = "SELECT " + columnSelect + " FROM " + schema + "." + selectedTable + " ORDER BY "
-				+ columns.get(0).get("column_name") + " DESC LIMIT " + selectedLimit;
+		query = "SELECT " + columnSelect + " FROM " + schema + "." + selectedTable + " LIMIT " + selectedLimit;
 		List<Map<String, Object>> data = runQuery(query);
 
 		Map<String, Object> response = new HashMap<>();
@@ -322,8 +312,12 @@ public class QueryService {
 		// If columns are not provided in payload, get default columns
 		if (columns == null || columns.isEmpty()) {
 			Map<String, Object> timeColumnMap = new HashMap<>();
-			timeColumnMap.put("column_name", (viewTables+"."+timeColumns)); // Assuming the key for column name is "name"
-			columns = Collections.singletonList(timeColumnMap); // Assuming getColumns() retrieves default columns
+		    timeColumnMap.put("column_name", ((joinRequired)?(joinTable1+ "." + timeColumns):(viewTables+ "." + timeColumns)) ); // Assuming the key for column name is "name"
+		    
+		    Map<String, Object> defaultColumnMap = new HashMap<>();
+		    defaultColumnMap.put("column_name", ((joinRequired)?(joinTable1+ "." + default_column):(viewTables+ "." + default_column))); // Assuming the key for column name is "name"
+		    
+		    columns = Arrays.asList(timeColumnMap, defaultColumnMap); // Assuming getColumns() retrieves default columns
 		}
 
 		// Construct column names string for SQL query
@@ -339,7 +333,7 @@ public class QueryService {
 		if(joinRequired) {
 			query+= " AND "+ joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable1+"."+timeColumn+" <= '"+maxTime+"' ";
 		}
-		query+=		 (!conditions.isBlank() ? "AND " + conditions : "")+" ORDER BY "+ viewTables+"."+timeColumn+" DESC LIMIT "+rowCount;
+		query+=		 (!conditions.isBlank() ? "AND " + conditions : "")+" LIMIT "+rowCount;
 		 
 
 		// Log the constructed query for debugging
@@ -414,7 +408,7 @@ public class QueryService {
 		String selectedColumn = (String) payload.get("filterColumn");
 		int selectedLimit = (Integer) payload.get("filterSelect");
 
-		String query = String.format("SELECT %s, COUNT(*) AS count FROM %s.%s GROUP BY %s ORDER BY count DESC LIMIT %d",
+		String query = String.format("SELECT %s, COUNT(*) AS count FROM %s.%s GROUP BY %s LIMIT %d",
 				selectedColumn, schema, selectedTable, selectedColumn, selectedLimit);
 		List<Map<String, Object>> data = runQuery(query);
 
