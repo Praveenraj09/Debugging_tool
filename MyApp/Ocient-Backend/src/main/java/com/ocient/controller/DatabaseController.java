@@ -2,12 +2,14 @@ package com.ocient.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -73,10 +75,10 @@ public class DatabaseController {
 		return queryService.getColumns();
 	}
 
-	@GetMapping("/filters")
-	public Map<String, Object> getFilters() {
+	@PostMapping("/filters")
+	public Map<String, Object> getFilters(@RequestBody Map<String, Object> payload) {
 		System.out.println("calling /filters");
-		Map<String, Object> payload = new HashMap<String, Object>();
+				
 		return queryService.getFilters(payload);
 	}
 
@@ -86,11 +88,18 @@ public class DatabaseController {
 		return queryService.getChartData(payload);
 	}
 
-	@PostMapping("/fetch_data")
-	public Map<String, Object> fetchData(@RequestBody Map<String, Object> payload) {
-		System.out.println("calling /fetch_data");
-		return queryService.fetchData(payload);
-	}
+	 @PostMapping("/fetch_data")
+	    public ResponseEntity<Map<String, Object>> fetchData(@RequestBody Map<String, Object> payload) {
+	        System.out.println("calling /fetch_data");
+
+	        Map<String, Object> result = queryService.fetchData(payload);
+
+	        if (result != null) {
+	            return ResponseEntity.ok(result);
+	        } else {
+	            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+	        }
+	    }
 
 	@PostMapping("/run_count")
 	public List<Map<String, Object>> runCount(@RequestBody Map<String, Object> payload) {
@@ -121,14 +130,6 @@ public class DatabaseController {
 	       return queryService.filterTable(payload);
 	    }
 	
-	@GetMapping("/logout")
-	public Map<String, String> logout(HttpServletRequest request, HttpServletResponse response) {
-		Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-		if (auth != null) {
-			new SecurityContextLogoutHandler().logout(request, response, auth);
-		}
-		return Map.of("redirect", "/login");
-	}
 	
 	
     @GetMapping("/report")

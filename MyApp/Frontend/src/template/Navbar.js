@@ -32,17 +32,14 @@ function Navbar() {
     const selectedValue = event.target.value;
     navigate(`/report/${selectedValue}`);    
   }
-
-  const handleLogout = () => {
-    axios.get('/logout')
-      .then(response => {
-        if (response.data.redirect) {
-          window.location.href = response.data.redirect;
-        }
-      })
-      .catch(error => {
-        console.error('Error logging out:', error);
-      });
+  const handleLogout = async () => {
+    try {
+      await axios.post('/logout');
+      localStorage.removeItem('authToken');
+      navigate('/login');
+    } catch (error) {
+      console.error("Failed to logout:", error);
+    }
   };
   
   const navigate = useNavigate();
@@ -53,9 +50,9 @@ function Navbar() {
         <img variant="h6" src={image} alt="Ocient Logo" width="100" height="20" />
         <Button variant="h6" color="inherit" href="/dashboard" sx={{ marginLeft: '10px' }}>Dashboard</Button>
         <Button variant="h6" color="inherit" href="/filters" sx={{ marginLeft: '10px' }}>Debug</Button>
-        <Button variant="h6" color="inherit" href="/tables" sx={{ marginLeft: '10px' }}>Tables</Button>
-        <Button variant="h6" color="inherit" href="/charts" sx={{ marginLeft: '10px' }}>Charts</Button>
-        <Button variant="h6" color="inherit" href="/mapview" sx={{ marginLeft: '10px' }} >MapView</Button>
+        { <Button variant="h6" color="inherit" href="/tables" sx={{ marginLeft: '10px' }}>Tables</Button>
+       /*<Button variant="h6" color="inherit" href="/charts" sx={{ marginLeft: '10px' }}>Charts</Button>
+        <Button variant="h6" color="inherit" href="/mapview" sx={{ marginLeft: '10px' }} >MapView</Button> 
         <FormControl variant="outlined">
           <Select
             value=""
@@ -64,13 +61,13 @@ function Navbar() {
             inputProps={{ 'aria-label': 'Select' }}
           >
             <MenuItem value="" disabled>
-            <Button variant="h6" color="inherit" sx={{ marginLeft: '10px' }} style={{color:'white'}}>Report</Button>
+            <Button variant="h6" color="inherit" sx={{ marginLeft: '10px' }} style={{color:'white'}}>Analytical Reports</Button>
             </MenuItem>
             {reportOptions.map((option, index) => (
               <MenuItem key={index} value={option}>{option}</MenuItem>
             ))}
           </Select>
-        </FormControl>
+        </FormControl>*/}
         <div style={{ marginLeft: 'auto' }}>
           <IconButton
             edge="end"
