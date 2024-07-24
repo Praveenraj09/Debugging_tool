@@ -131,4 +131,10 @@ public class DatabaseController {
     	Map<String, Object> map =  queryService.generateReport(reportName);
         return ResponseEntity.ok(map);
     }
+    
+    @PostMapping("/getRawdata")
+    public List<Map<String, Object>> getRawData(@RequestBody Map<String, Object> payload) {
+		return queryService.getRawData(payload);
+	}
+    
 }

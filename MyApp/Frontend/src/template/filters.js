@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback, useMemo,useRef } from 'react';
 import axios from 'axios';
 import { DataGrid, GridToolbar } from '@mui/x-data-grid';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Container, Grid, Typography, IconButton, Paper, Popper, Table, TableHead, TableRow, TableCell, TableBody, CardContent, CircularProgress, List, ListItem, ListItemText, CardHeader, FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
+import { Autocomplete,Dialog,Modal,Box, DialogTitle, DialogContent, DialogActions, Container, Grid, Typography, IconButton, Paper, Popper, Table, TableHead, TableRow, TableCell, TableBody, CardContent, CircularProgress, List, ListItem, ListItemText, CardHeader, FormControl, InputLabel, Select, MenuItem, TextField, Button } from '@mui/material';
 import Navbar from './Navbar';
 import Footer from './Footer';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -16,6 +16,11 @@ import { format, subDays } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { styled } from '@mui/material/styles';
 import Histogram from 'highcharts/modules/histogram-bellcurve';
+import { Tooltip } from '@mui/material';
+import { CopyToClipboard } from 'react-copy-to-clipboard';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import PrettyPrintTooltip from './prettyprint'; // Assuming you have a PrettyPrintTooltip component
+import VisibilityIcon from '@mui/icons-material/Visibility';
 function Filters() {
   const [conditions, setConditions] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
@@ -40,12 +45,17 @@ function Filters() {
   const [showDataPreview, setShowDataPreview] = useState(false);
   const [showColumnPreview, setShowColumnPreview] = useState(false);
   const [showcountPreview, setShowcountPreview] = useState(false);
-  const [runCountResult, setRunCountResult] = useState('Fetching...');
+  const [runCountResult, setRunCountResult] = useState('No hits');
   const [open, setOpen] = useState(false);
   const [selectedValues, setSelectedValues] = useState([]);
   const [initialColumnsLoaded, setInitialColumnsLoaded] = useState(false); // Track initial columns load
   const [disableButton,setDisableButton] = useState(false);
   const [chartselect,setChartselect] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+const [modalData, setModalData] = useState('');
+const [clipboardMessage, setClipboardMessage] = useState(false);
+const [search, setSearch] = useState('');
+const [loadingRawdata, setLoadingRawdata] = useState(false);
   Histogram(Highcharts);
   function formatDateToUS(dateObject) {
     return dateObject.toLocaleString('en-US', {
@@ -60,7 +70,20 @@ function Filters() {
   const handleClose = () => {
     setOpen(false);
   };
-
+  const handleOpenModal = (data) => {
+    setModalData(data);
+    setModalOpen(true);
+  };
+  const handleCopyToClipboard = (text) => {
+    setClipboardMessage(true);
+    setTimeout(() => {
+      setClipboardMessage(false);
+    }, 3000);
+  };
+ 
+  const handleCloseModal = () => {
+    setModalOpen(false);
+  };
   const toggleFilterDropDownDropdown = () => {
     setShowFilterDropDown(prevState => !prevState);
   };
@@ -79,6 +102,111 @@ function Filters() {
   const toggleCountDropdown = () => {
     setShowcountPreview(prevState => !prevState);
   };
+  const handleEyeClick = async(row) => {
+
+    if(row["auction.auctionid"]===undefined||row["auction.auctionid"]===undefined){
+      alert("Please select column auctionid and rerun it to view raw request");
+      return;
+    }
+    if (!xAxisMin || !xAxisMax) {
+      alert("Please provide start and end date.");
+      setLoading(false);
+      return;
+    }
+    if (xAxisMin >= xAxisMax) {
+    alert("Start date must be earlier than end date.");
+    setLoading(false);
+    return;
+  }
+  setModalData("fetching...")
+  setModalOpen(true);
+  setLoadingRawdata(true);
+      const auctionid = row["auction.auctionid"]||row["auction.auctionid"]
+      const fetchPayload = {
+        auctionid: auctionid,
+        minTime:xAxisMin,
+        maxTime:xAxisMax,
+      };
+      const response = await axios.post('/api/getRawdata',fetchPayload);
+      const data = response.data;
+      setLoadingRawdata(false);
+    setModalData(data);
+   
+  };
+  const renderCellColumn = (params) => (
+    <IconButton onClick={() => handleEyeClick(params.row)}>
+    <VisibilityIcon />
+  </IconButton>
+  )
+  const renderCell = (params) => (
+    <>
+    
+  <Tooltip
+      title={
+        <Paper
+          style={{
+            padding: '10px',
+            minwidth: '300px',
+            minHeight: '100px',
+            overflow: 'auto',
+            boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',
+            position: 'relative'
+          }}
+        >
+          <div style={{ marginBottom: '10px' }}>
+            <PrettyPrintTooltip value={params.value} />
+          </div>
+          <CopyToClipboard text={params.value} onCopy={() => handleCopy(params.value)}>
+               <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '10px' }}>
+              <ContentCopyIcon />
+            </IconButton>
+          </CopyToClipboard>
+          <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '40px' }} onClick={() => handleOpenModal(params.value)}>
+            <VisibilityIcon />
+          </IconButton>
+        </Paper>
+      }
+      arrow
+      interactive
+      PopperProps={{
+        modifiers: [
+          {
+            name: 'flip',
+            options: {
+              fallbackPlacements: ['right'],
+            },
+          },
+          {
+            name: 'offset',
+            options: {
+              offset: [10, -10],
+            },
+          },
+          {
+            name: 'preventOverflow',
+            options: {
+              padding: 8,
+            },
+          },
+        ],
+        style: {
+          zIndex: 1300,
+        },
+      }}
+      placement="left-start"
+    >
+      <span>
+        {Array.isArray(params.value) ? params.value.join(', ') : params.value}
+      </span>
+    </Tooltip>
+    </>
+  );
+  
+
+  const customizedColumns = columns.map((col) => ({
+    ...col,
+    renderCell,
+  }));
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(storedRows);
@@ -122,17 +250,18 @@ function Filters() {
     }
   };
 
-  const fetchFilters = async (minTime = xAxisMin, maxTime = xAxisMax) => {
+  const fetchFilters = async ( ) => {
+
     setLoading(true);
     setRunCountResult('Fetching...');
     setFilterSelectedColumn('');
     setSuggestions([]);
-    if (!minTime || !maxTime) {
+    if (!xAxisMin || !xAxisMax) {
       alert("Please provide start and end date.");
       setLoading(false);
       return;
     }
-if (minTime >= maxTime) {
+if (xAxisMin >= xAxisMax) {
     alert("Start date must be earlier than end date.");
     setLoading(false);
     return;
@@ -154,8 +283,8 @@ if (minTime >= maxTime) {
         conditions: conditionString,
         columns: selectedValues,
         page: currentPage,
-        minTime,
-        maxTime,
+        minTime:xAxisMin,
+        maxTime:xAxisMax,
         itemsPerPage
       };
       const response = await axios.post('/api/filters',fetchPayload);
@@ -163,17 +292,27 @@ if (minTime >= maxTime) {
       setXvalues(data.x_values);
       setAvalues(data.a_values);
       setAnames(data.a_names);
+     fetchData(xAxisMin, xAxisMax);
       
-      fetchData(minTime, maxTime);
-      
-      fetchRunCount(conditions, minTime, maxTime);
+      fetchRunCount(conditions, xAxisMin, xAxisMax);
     } catch (error) {
       console.error('Error fetching filters:', error);
     } finally {
       setLoading(false);
     }
   };
-
+  const UniqueValueColumn = [
+    { field: 'value', headerName: 'Unique Values', width: 125 },
+    { field: 'count', headerName: 'Count', width: 80 },
+    { field: 'percentage', headerName: '%', width: 80 },
+  ];
+  const UniqueValueRows = suggestions.map((item, index) => ({
+    id: index + 1, // Ensure each row has a unique id
+    value: item.value,
+    count: item.count,
+    percentage: item.percentage,
+  }));
+  
   const fetchData =  async (xAxisMin,xAxisMax) => {
     setDisableButton(true);
     setLoading2(true);
@@ -195,6 +334,7 @@ if (minTime >= maxTime) {
       const response = await axios.post('/api/fetch_data', fetchPayload);
       const formattedData = response.data.datas;
       setStoredRows(formattedData);
+      console.log(formattedData.length)
       setSelectedcolumns(response.data.columns);
       const startIdx = (currentPage - 1) * itemsPerPage;
       const endIdx = currentPage * itemsPerPage;
@@ -233,7 +373,7 @@ if (minTime >= maxTime) {
         maxTime: xAxisMax
       };
       const response = await axios.post('/api/run_count', payload);
-      setRunCountResult(`Results for selected criteria is: ${formatNumber(response.data[0]["counts"])} records`);
+      setRunCountResult(`${formatNumber(response.data[0]["counts"])} hits`);
       setOpen(true);
     } catch (error) {
       console.error('Error fetching run count:', error);
@@ -244,7 +384,8 @@ if (minTime >= maxTime) {
 
   const handleFilterTableChange = (e) => {
     setFilterSelectedColumn(e.target.value);
-    const selectedColumnValues = storedRows.map((row) => row[e.target.value]);
+    const selectedColumnValues = storedRows.map((row) => row[e.target.value],
+    renderCell);
   
     const processValue = (value) => {
       if (typeof value === 'string') {
@@ -258,20 +399,35 @@ if (minTime >= maxTime) {
       }
       return value.trim() !== '' ? value : null;
     };
-  
-    const uniqueValues = Array.from(
-      new Set(
-        selectedColumnValues.flatMap(value => {
-          const processed = processValue(value);
-          return Array.isArray(processed) ? processed : [processed];
-        })
-      )
-    ).filter(value => value !== null && value !== undefined);
-  
-    // Sort the unique values
-    uniqueValues.sort();
-  
-    setSuggestions(uniqueValues);
+    const valueCountMap = new Map();
+
+    selectedColumnValues.flatMap(value => {
+      const processed = processValue(value);
+      const valuesArray = Array.isArray(processed) ? processed : [processed];
+      
+      valuesArray.forEach(val => {
+        if (val !== null && val !== undefined) {
+          if (valueCountMap.has(val)) {
+            valueCountMap.set(val, valueCountMap.get(val) + 1);
+          } else {
+            valueCountMap.set(val, 1);
+          }
+        }
+      });
+    });
+    
+    const totalCount = Array.from(valueCountMap.values()).reduce((acc, count) => acc + count, 0);
+    
+    const uniqueValuesWithCounts = Array.from(valueCountMap.entries())
+      .map(([value, count]) => ({
+        value,
+        count,
+        percentage: Math.ceil((count / totalCount) * 100) // Calculate percentage and fix to 2 decimal places
+      }))
+      .sort((a, b) => a.value.localeCompare(b.value));
+    setSuggestions(uniqueValuesWithCounts);
+    
+
   };
 
   const valueToNameMap = {
@@ -326,8 +482,10 @@ if (minTime >= maxTime) {
     const endTimeFormatted = formatDateTime(formatDate(endTime));
     setXAxisMin(startTimeFormatted);
     setXAxisMax(endTimeFormatted);
+    setXAxisMin(startTimeFormatted);
+    setXAxisMax(endTimeFormatted);
     setTimeout(() => {
-      fetchFilters(startTimeFormatted, endTimeFormatted);
+      fetchFilters();
     }, 1);
   };
   
@@ -369,14 +527,16 @@ if (minTime >= maxTime) {
       alert('Both Condition and value are required');
       return;
     }
+    const filterColumnselected = filterColumn.column_name?filterColumn.column_name:"";
     const charVarcharTypes = ['char', 'varchar','ipv'];
     const tinyintTypes = ['tinyint', 'smallint'];
-    const columnType = getColumnType(filterColumn).toLowerCase();
+    const columnType = getColumnType(filterColumnselected).toLowerCase();
     const isCharVarcharType = charVarcharTypes.some(type => columnType.includes(type));
     const isTinySmallBigIntType = tinyintTypes.some(type => columnType.includes(type));
-
+    const isbinary = ['binary'].some(type => columnType.includes(type));
+    
     //temperory fix starts
-    const tempValues = filterColumn.split(".");
+    const tempValues = filterColumnselected.split(".");
     const tempTableGDCColumn = [
       "deals_dealid",
       "geo_isosecondarysubdivision",
@@ -454,76 +614,82 @@ if (minTime >= maxTime) {
     let newCondition;
     const values = value.split(',').map(v => v.trim());
     if (value.toLowerCase().includes('null')) {
-      newCondition = { field: filterColumn, operator: 'is', value: value };
+      newCondition = { field: filterColumnselected, operator: 'is', value: value };
     }
     else if (isInOperator) {// multi value
       if (!isArrayColumn) {  //non array type for multi value
 
         //temperory fix 
          if(isTempColumnPresent){
-          newCondition = { field: filterColumn, operator: 'in', value: `(${values.map(v => `'${v}'`).join(', ')})` };
+          newCondition = { field: filterColumnselected, operator: 'in', value: `(${values.map(v => `'${v}'`).join(', ')})` };
          }
         //temperory fix 
         else if (isCharVarcharType) {
           // Non-array type and varchar/char
-          newCondition = { field: filterColumn, operator: 'in', value: `(${values.map(v => `'${v}'`).join(', ')})` };
+          newCondition = { field: filterColumnselected, operator: 'in', value: `(${values.map(v => `'${v}'`).join(', ')})` };
         }
         else if (isTinySmallBigIntType) {
           // Non-array type and bigint/tinyint/smallint
-          newCondition = { field: `${filterColumn}`, operator: 'in', value: `(${values.map(v => `${v}`).join(', ')})` };
+          newCondition = { field: `${filterColumnselected}`, operator: 'in', value: `(${values.map(v => `${v}`).join(', ')})` };
+        }
+        else if(isbinary){
+          newCondition = { field: filterColumnselected, operator: 'in', value: `(${values.map(value => `binary('0x${value}')`).join(', ')})` };
         } else {
           // Non-array type and not varchar/char
-          newCondition = { field: filterColumn, operator: 'in', value: `(${values.join(', ')})` };
+          newCondition = { field: filterColumnselected, operator: 'in', value: `(${values.join(', ')})` };
         }
       } else { // array type for multi value
         //temperory fix 
         if(isTempColumnPresent){
-          newCondition = { field: filterColumn, operator: '&&', value: `ARRAY[${values.map(v => `'${v}'`).join(', ')}]` };
+          newCondition = { field: filterColumnselected, operator: '&&', value: `ARRAY[${values.map(v => `'${v}'`).join(', ')}]` };
          }
         //temperory fix 
         else if (isCharVarcharType) {
           // Array type and varchar/char
-          newCondition = { field: filterColumn, operator: '&&', value: `ARRAY[${values.map(v => `'${v}'`).join(', ')}]` };
+          newCondition = { field: filterColumnselected, operator: '&&', value: `ARRAY[${values.map(v => `'${v}'`).join(', ')}]` };
         } else if (isTinySmallBigIntType) {
           // array type and bigint/tinyint/smallint
-          newCondition = { field: `${filterColumn}`, operator: '&&', value: `ARRAY[${values.map(v => `${v}`).join(', ')}]` };
+          newCondition = { field: `${filterColumnselected}`, operator: '&&', value: `ARRAY[${values.map(v => `${v}`).join(', ')}]` };
         }
         else {
           // Array type and not varchar/char
-          newCondition = { field: filterColumn, operator: '&&', value: `ARRAY[${values.join(', ')}]` };
+          newCondition = { field: filterColumnselected, operator: '&&', value: `ARRAY[${values.join(', ')}]` };
         }
       }
     } else { // Single value
       if (!isArrayColumn) { //single value non arraytype
         //temperory fix 
         if(isTempColumnPresent){
-          newCondition = { field: filterColumn, operator: '=', value: `'${value}'`  };
+          newCondition = { field: filterColumnselected, operator: '=', value: `'${value}'`  };
          }
         //temperory fix 
         else if (isCharVarcharType) {
           //normal varchar/char
-          newCondition = { field: filterColumn, operator: '=', value: `'${value}'` };
+          newCondition = { field: filterColumnselected, operator: '=', value: `'${value}'` };
         } else if (isTinySmallBigIntType) {
           //normal shortint/tinyint/bigint
-          newCondition = { field: `${filterColumn}`, operator: '=', value: `${value}` };
-        } else {
+          newCondition = { field: `${filterColumnselected}`, operator: '=', value: `${value}` };
+        } else if(isbinary){
+          newCondition = { field: filterColumnselected, operator: '=', value: `binary('0x${value}')` };
+        } 
+        else {
           //int,float,boolean etc
-          newCondition = { field: filterColumn, operator: '=', value: value };
+          newCondition = { field: filterColumnselected, operator: '=', value: value };
         }
       } else {  //single value arraytype scalar
          //temperory fix 
          if(isTempColumnPresent){
-          newCondition = { field: filterColumn, operator: '@>', value: `'${value}'`  };
+          newCondition = { field: filterColumnselected, operator: '@>', value: `'${value}'`  };
          }
         //temperory fix 
         else if (isCharVarcharType) {
           //normal varchar/char
-          newCondition = { field: filterColumn, operator: '@>', value: `'${value}'` };
+          newCondition = { field: filterColumnselected, operator: '@>', value: `'${value}'` };
         } else if (isTinySmallBigIntType) {
           //normal shortint/tinyint/bigint
-          newCondition = { field: `${filterColumn}`, operator: '@>', value: `'${value}'` };
+          newCondition = { field: `${filterColumnselected}`, operator: '@>', value: `'${value}'` };
         } else {
-          newCondition = { field: filterColumn, operator: '@>', value: value };
+          newCondition = { field: filterColumnselected, operator: '@>', value: value };
         }
       }
     }
@@ -564,12 +730,22 @@ if (minTime >= maxTime) {
     setConditions(updatedCondition);
   };
 
-  const escapedColumns = selectedcolumns.map((column) => ({
+  const escapedColumns = [
+    {
+      field: 'viewData',
+      headerName: 'View Raw Data',
+      width: 100,
+      renderCell: renderCellColumn, // Render the eye icon
+    },
+    ...selectedcolumns.map((column) => ({
     field: column.column_name,
     headerName: column.column_name,
     sortable: true,
     width: 250,
-  }));
+    dataType: column.data_type,
+    renderCell,
+    
+    }))];
 
   const formatDateTime = (datetime) => {
     const [date, time] = datetime.split('T');
@@ -616,12 +792,23 @@ if (minTime >= maxTime) {
    const options = {
       chart: {
         type: 'histogram',
-        zoomType: 'xy', // Enable zoom on the x-axis
+        zoomType: 'x', // Enable zoom on the x-axis
         panning: true, // Enable panning
         panKey: 'shift' // Pan with the shift key
       },
       title: {
-        text: 'Request vs Time\n Hits'+runCountResult,
+        text: 'Request vs Time',
+        style: {
+          fontSize: '17px', // Adjust font size as needed
+          color: 'black' // Adjust color if needed
+        }
+      },
+      subtitle: {
+        text: `(${runCountResult})`,
+        style: {
+          fontSize: '14px', // Adjust font size as needed
+          color: 'dark grey' // Adjust color if needed
+        }
       },
       xAxis: {
         categories: formattedDates,
@@ -648,7 +835,7 @@ if (minTime >= maxTime) {
       },
       yAxis: {
         title: {
-          text: 'Record Count',
+          text: 'Request Count',
         },
       },
       rangeSelector: {
@@ -734,6 +921,28 @@ if (minTime >= maxTime) {
         ],
       },
   };
+
+  const handleCopy = (value) => {
+    let parsedValue;
+    try {
+      parsedValue = JSON.parse(value);
+    } catch (error) {
+      // If parsing fails, fall back to displaying the raw string
+      parsedValue = value;
+    }
+    
+    const prettyPrintValue = Array.isArray(parsedValue)
+      ? `[${parsedValue.map((item, index) => `\n  ${JSON.stringify(item, null, 2)}`).join(',')}\n]`
+      : JSON.stringify(parsedValue, null, 2);
+  
+    navigator.clipboard.writeText(prettyPrintValue).then(() => {
+      console.log('Copied to clipboard successfully!');
+      // Show a message or perform any other action
+    }).catch((err) => {
+      console.error('Could not copy text: ', err);
+    });
+    handleCopyToClipboard(prettyPrintValue);
+  };
   const isInitialMount = useRef(true);
   useEffect(() => {
     if (isInitialMount.current) {
@@ -775,14 +984,14 @@ if (minTime >= maxTime) {
                   <>
                   <div className="col-md-12">
                     <FormControl fullWidth style={{ marginTop: '20px' }} required>
-                      <TextField
+                    <TextField
                         label="Select Start Date (UTC)"
                         type="datetime-local"
                         value={xAxisMin}
                         timezone="America/New_York"
                         onChange={(event) => {
                           const datetime = formatDateTime(event.target.value);
-                          setXAxisMin(datetime);                         
+                          setXAxisMin(datetime);
                         }}
                         InputLabelProps={{
                           shrink: true,
@@ -800,7 +1009,6 @@ if (minTime >= maxTime) {
                         onChange={(event) => {
                           const datetime = formatDateTime(event.target.value);
                           setXAxisMax(datetime);
-                          //fetchRunCount(conditions, xAxisMin, datetime);
                         }}
                         InputLabelProps={{
                           shrink: true,
@@ -811,22 +1019,37 @@ if (minTime >= maxTime) {
                     </FormControl>
                     </div>
 <div className="col-md-12">
-                    <FormControl fullWidth style={{ marginTop: '20px' }} required>
-
-                      <InputLabel style={{ marginTop: '-5px' }} htmlFor="filterColumn">Select a Column:</InputLabel>
-                      <Select
-                        id="filterColumn"
-                        value={filterColumn}
-                        onChange={(e) => setFilterColumn(e.target.value)}
-                        required
-                      >
-                        {columns.map((column) => (
-                          <MenuItem key={column.id} value={column.column_name} style={{ whiteSpace: 'normal', wordBreak: 'break-word', width: '300px' }}>
-                            {column.column_name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl></div><div className="col-md-12">
+<FormControl fullWidth style={{ marginTop: '20px' }} required>
+<Autocomplete
+      disablePortal
+      id="filterColumn"
+      options={columns}
+      getOptionLabel={(option) => option.column_name || ''} // Safeguard with fallback empty string
+      value={filterColumn}
+      onChange={(event, newValue) => setFilterColumn(newValue)}
+      sx={{ width: 300 }}
+      renderInput={(params) => <TextField {...params} label="Select a Column" />}
+      isOptionEqualToValue={(option, value) => option.id === value?.id} // Ensure correct comparison
+    />
+      {/* <Autocomplete
+        id="filterColumn"
+        options={columns.map(column=>column.olumn_name)}
+        getOptionLabel={columns.map(column=>column.column_name)}
+        value={filterColumn}
+        onChange={handleChangeAutocomplete}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Select a Column"
+            variant="outlined"
+            required
+            style={{ marginTop: '-5px' }}
+          />
+        )}
+        fullWidth
+        isOptionEqualToValue={(option, value) => option === value}
+      /> */}
+    </FormControl>
                     <TextField
                       id="value"
                       label="Value"
@@ -924,9 +1147,9 @@ if (minTime >= maxTime) {
             
           </div>
           
-            <Typography variant="p" style={{ marginTop: '1px' }} className="card-header">Distinct Values Check<WhiteIconButton onClick={toggleshowDataPreviewDropdown}>
+            <Typography variant="p" style={{ marginTop: '1px' }} className="card-header">Data Distribution<WhiteIconButton onClick={toggleshowDataPreviewDropdown}>
               <ArrowDropDownIcon />
-            </WhiteIconButton></Typography>   <div className="row" style={{ marginTop: '20px', minHeight: '400px', maxHeight: '500px', overflowX: 'auto' }}>    
+            </WhiteIconButton></Typography>   <div >    
           {showDataPreview && (
             <>
               <div >
@@ -946,20 +1169,9 @@ if (minTime >= maxTime) {
                       ))}
                       </Select>
                 </FormControl>
-                </div><div>
-                <div id="scrollable-table" className="col-md-12" style={{ width: '100%' }}>
-
-                  <table className="suggesstiontable scrollable-table">
-                    <tbody>
-                      {suggestions.map((suggestion, index) => (
-                        <tr><td key={index} button onClick={() => setValue(suggestion)}>
-                          <ListItemText variant="p" primary={suggestion} />
-                        </td></tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
+                </div><div className="row" style={{ marginTop: '10px', minHeight: '400px', maxHeight: '500px'}}>
+                <DataGrid rows={UniqueValueRows} columns={UniqueValueColumn} pagination={false} pageSizeOptions={false}/>
+               
               </div>
               
             </>)}
@@ -967,6 +1179,55 @@ if (minTime >= maxTime) {
             </div>
         </Grid>
         <Grid item xs={10}>
+        <Modal
+  open={modalOpen}
+  onClose={handleCloseModal}
+  aria-labelledby="modal-title"
+  aria-describedby="modal-description"
+>
+  <Box
+    sx={{
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      width: '80%',
+      bgcolor: 'background.paper',
+      boxShadow: 24,
+      p: 4,
+      overflow: 'auto',
+      maxHeight: '80vh'
+    }}
+  >{loadingRawdata ? <CircularProgress size={50} /> : null}
+    <Typography id="modal-title" variant="h6" component="h2">
+      Data
+    </Typography>
+    
+    <Typography id="modal-description" sx={{ mt: 2 }}>
+      <PrettyPrintTooltip value={modalData} />
+    </Typography>
+    <CopyToClipboard text={modalData} onCopy={() => handleCopy(modalData)}>
+      <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '10px' }}>
+        <ContentCopyIcon />
+      </IconButton>
+    </CopyToClipboard>
+  </Box>
+</Modal>
+{clipboardMessage && (
+  <div style={{
+    position: 'fixed',
+    bottom: '10px',
+    right: '10px',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    color: 'white',
+    padding: '10px',
+    borderRadius: '5px',
+    zIndex: 1500
+  }}>
+    Copied to clipboard!
+  </div>
+)}
+
         <DialogActions style={{ display: 'flex', justifyContent: 'space-between' }}>
             {/* Other buttons */}
             <div style={{ marginLeft: 'auto' }}>
@@ -1006,6 +1267,7 @@ if (minTime >= maxTime) {
           <div style={{ height: 400, width: '100%', overflowX: 'auto' }}>
 
             {loading2 ? <CircularProgress size={50} /> : null}
+          
             <DataGrid
               rows={storedRows}
               columns={escapedColumns}

@@ -69,8 +69,22 @@ public class QueryService {
 	@Value("${ocient.db.viewable_primaryId}")
 	private String viewable_primaryId;
 	
+	@Value("${ocient.db.jointable1_primaryid1}")
+	private String joinTable1PrimaryId1;
+
+	@Value("${ocient.db.viewable_primaryId1}")
+	private String viewable_primaryId1;
+
 	@Value("${ocient.db.defaultcolumn}")
 	private String default_column;
+
+
+	@Value("${ocient.db.rawdataTable}")
+	private String rawtable;
+
+
+	@Value("${ocient.db.rawTable_primaryid}")
+	private String rawtable_primaryid;
 
 
 
@@ -231,7 +245,8 @@ public class QueryService {
 							+ " AS time_range_start, "
 							+ " DATE_TRUNC('minute', "+ viewTables+"."+timeColumn+") - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM "+ viewTables+"."+timeColumn+")::INT % "+chart_frequncy+") + "
 							+ " INTERVAL '"+chart_frequncy+" minute' AS time_range_end, "
-							+ " COUNT(*) AS record_count FROM "+schema+"."+ viewTables+" INNER JOIN "+schema+"."+joinTable1+" ON "+ viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" "
+							+ " COUNT(*) AS record_count FROM "+schema+"."+ viewTables+" INNER JOIN "+schema+"."+joinTable1+" ON "+ viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "
+							+ viewTables+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" "
 							+ " WHERE "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"'  AND "
 							+ " "+joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+joinTable1+"."+timeColumn+" <= '"+maxTime+"' "
 							+ " "+(!conditions.isBlank() ? "AND " + conditions : "") +" "
@@ -321,13 +336,26 @@ public class QueryService {
 		}
 
 		// Construct column names string for SQL query
-		String columnNames = columns.stream().map(column -> "" + column.get("column_name") + " as \""+column.get("column_name")+"\" ")
-				.collect(Collectors.joining(", "));
+//		String columnNames = columns.stream().map(column -> "" + column.get("column_name") + " as \""+column.get("column_name")+"\" ")
+//				.collect(Collectors.joining(", "));
 		
+		//added for auctionid changes binary to string
+		 String columnNames = columns.stream()
+		            .map(column -> {
+		                String columnName = (String) column.get("column_name");
+		                if ("auction.auctionid".equals(columnName) || "auction_details.auctionid".equals(columnName)) {
+		                    return " SUBSTRING(char(" + columnName + "), 3) as \"" + columnName + "\" ";
+		                } else {
+		                    return columnName + " as \"" + columnName + "\" ";
+		                }
+		            })
+		            .collect(Collectors.joining(", "));
+		 
+		 
 		System.out.println(columnNames);
 		String query = "SELECT "+columnNames+" FROM "+schema+"."+viewTables+" ";
 		if(joinRequired) {
-			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" ";
+			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ viewTables+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
 		}
 		query+= " WHERE "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"' ";
 		if(joinRequired) {
@@ -365,7 +393,7 @@ public class QueryService {
 		System.out.println(conditions + " " + minTime + " " + maxTime);
 		String query = "SELECT count(*) AS counts FROM "+schema+"."+viewTable+" ";
 		if(joinRequired) {
-			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTable+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" ";
+			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTable+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ viewTable+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
 		}
 		query+= " WHERE "+ viewTable+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTable+"."+timeColumn+" <= '"+maxTime+"' ";
 		if(joinRequired) {
@@ -468,7 +496,9 @@ public class QueryService {
 						
 					}
 					else if(obj.getClass().toString().contains("class [B")) {
-						row.put(columnName, convertToHex(rs.getObject(columnName).toString()));
+						//row.put(columnName, convertToHex(rs.getObject(columnName).toString()));
+						//auction id changes binary to string
+						row.put(columnName, rs.getObject(columnName).toString());
 					}
 					else {
 						row.put(columnName, rs.getObject(columnName));
@@ -604,6 +634,23 @@ public class QueryService {
 	public List<String> getReports() {
 
 		return reportConfig.getReportColumnsMap().keySet().stream().collect(Collectors.toList());
+	}
+
+	public List<Map<String, Object>> getRawData(Map<String, Object> payload) {
+		String auctionid = (String) payload.get("auctionid");
+		String minTime = (String) payload.get("minTime");
+		String maxTime = (String) payload.get("maxTime");
+		if (maxTime == null)
+			maxTime = ConvertionFunction.convertDate(new Date());
+		if (minTime == null) {
+			Calendar calendar = Calendar.getInstance();
+			calendar.add(Calendar.DAY_OF_MONTH, -1);
+			Date previousDate = calendar.getTime();
+			minTime = ConvertionFunction.convertDate(previousDate);
+		}
+		String query = "SELECT auctionid,created,record_type,networkid,traffictype,rawrequest,rawresponse from "+schema+"."+rawtable+" WHERE ("+rawtable+"."+rawtable_primaryid +" = binary('0x"+auctionid+"')) AND "
+				+ rawtable+"."+timeColumn+" >= '"+minTime+"' AND "+ rawtable+"."+timeColumn+" <= '"+maxTime+"'";
+		return runQuery(query);
 	}
 
 }
