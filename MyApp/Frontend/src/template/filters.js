@@ -15,6 +15,7 @@ import MultiSelectDropdown from './MultiSelectDropDown';
 import { format, subDays } from 'date-fns';
 import * as XLSX from 'xlsx';
 import { styled } from '@mui/material/styles';
+import Histogram from 'highcharts/modules/histogram-bellcurve';
 function Filters() {
   const [conditions, setConditions] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
@@ -44,6 +45,8 @@ function Filters() {
   const [selectedValues, setSelectedValues] = useState([]);
   const [initialColumnsLoaded, setInitialColumnsLoaded] = useState(false); // Track initial columns load
   const [disableButton,setDisableButton] = useState(false);
+  const [chartselect,setChartselect] = useState('');
+  Histogram(Highcharts);
   function formatDateToUS(dateObject) {
     return dateObject.toLocaleString('en-US', {
       year: 'numeric',
@@ -104,7 +107,7 @@ function Filters() {
     setLoading2(true);
     
     try {
-      const response = await axios.get('/columns');
+      const response = await axios.get('/api/columns');
       setColumns(response.data);
     } catch (error) {
       console.error('Error fetching columns:', error);
@@ -119,16 +122,23 @@ function Filters() {
     }
   };
 
-  const fetchFilters = async () => {
+  const fetchFilters = async (minTime = xAxisMin, maxTime = xAxisMax) => {
     setLoading(true);
-
-    if (!xAxisMin || !xAxisMax) {
+    setRunCountResult('Fetching...');
+    setFilterSelectedColumn('');
+    setSuggestions([]);
+    if (!minTime || !maxTime) {
       alert("Please provide start and end date.");
       setLoading(false);
       return;
     }
-if (xAxisMin >= xAxisMax) {
+if (minTime >= maxTime) {
     alert("Start date must be earlier than end date.");
+    setLoading(false);
+    return;
+  }
+  if( selectedValues.length ===0){
+    alert("Select atleast one row to display");
     setLoading(false);
     return;
   }
@@ -144,18 +154,19 @@ if (xAxisMin >= xAxisMax) {
         conditions: conditionString,
         columns: selectedValues,
         page: currentPage,
-        minTime: xAxisMin,
-        maxTime: xAxisMax,
+        minTime,
+        maxTime,
         itemsPerPage
       };
-      const response = await axios.post('/filters',fetchPayload);
+      const response = await axios.post('/api/filters',fetchPayload);
       const data = response.data;
       setXvalues(data.x_values);
       setAvalues(data.a_values);
       setAnames(data.a_names);
-      console.log("filters")
-      fetchData(xAxisMin, xAxisMax);
-      fetchRunCount(conditions, xAxisMin, xAxisMax);
+      
+      fetchData(minTime, maxTime);
+      
+      fetchRunCount(conditions, minTime, maxTime);
     } catch (error) {
       console.error('Error fetching filters:', error);
     } finally {
@@ -163,7 +174,7 @@ if (xAxisMin >= xAxisMax) {
     }
   };
 
-  const fetchData =  async () => {
+  const fetchData =  async (xAxisMin,xAxisMax) => {
     setDisableButton(true);
     setLoading2(true);
     try {
@@ -181,8 +192,7 @@ if (xAxisMin >= xAxisMax) {
         maxTime: xAxisMax,
         itemsPerPage
       };
-      console.log(fetchPayload)
-      const response = await axios.post('/fetch_data', fetchPayload);
+      const response = await axios.post('/api/fetch_data', fetchPayload);
       const formattedData = response.data.datas;
       setStoredRows(formattedData);
       setSelectedcolumns(response.data.columns);
@@ -203,7 +213,7 @@ if (xAxisMin >= xAxisMax) {
   }
 
 
-  const fetchRunCount =  async (conditions, xAxisMin, xAxisMax) => {
+  const fetchRunCount =  async (conditions,xAxisMin,xAxisMax) => {
     setRunCountResult('Fetching...');
     try {
       let conditionString = '';
@@ -214,7 +224,7 @@ if (xAxisMin >= xAxisMax) {
 
         }).join(' AND ');
         //conditionString = conditions.map(condition => `Str(${condition.field}) ${condition.operator} '${condition.value}'`).join(' AND ');
-      } console.log(conditionString)
+      } 
       const payload = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,7 +232,7 @@ if (xAxisMin >= xAxisMax) {
         minTime: xAxisMin,
         maxTime: xAxisMax
       };
-      const response = await axios.post('/run_count', payload);
+      const response = await axios.post('/api/run_count', payload);
       setRunCountResult(`Results for selected criteria is: ${formatNumber(response.data[0]["counts"])} records`);
       setOpen(true);
     } catch (error) {
@@ -232,23 +242,6 @@ if (xAxisMin >= xAxisMax) {
 
   const handlePageChange = (page) => setCurrentPage(page);
 
-  // const handleFilterTableChange = (e) => {
-  //   setFilterSelectedColumn(e.target.value);
-  //   const selectedColumnValues = storedRows.map((row) => row[e.target.value]);
-  //   const uniqueValues = Array.from(new Set(selectedColumnValues)).filter(value => {
-  //     if (value !== null && value !== undefined) {
-  //       if (typeof value === 'string') {         
-  //         return value.trim() !== '';
-  //       } else if (Array.isArray(value)) {
-  //         console.log("array")
-  //         return value.length > 0 && value.some(item => item !== null && item !== undefined && typeof item === 'string' && item.trim() !== '');
-  //       }
-  //       return true;
-  //     }
-  //     return false;
-  //   });
-  //   setSuggestions(uniqueValues);
-  // };
   const handleFilterTableChange = (e) => {
     setFilterSelectedColumn(e.target.value);
     const selectedColumnValues = storedRows.map((row) => row[e.target.value]);
@@ -280,6 +273,63 @@ if (xAxisMin >= xAxisMax) {
   
     setSuggestions(uniqueValues);
   };
+
+  const valueToNameMap = {
+    1: 'last 1h',
+    3: 'last 3h',
+    6: 'last 6h',
+    12: 'last 12h',
+    24: 'last 1d',
+  };
+  const handleChartChange = (event) => {
+    const selectedValue = event.target.value;
+    setChartselect(selectedValue);
+  
+    const currentTime = new Date();
+  
+    // Initialize endTime to the current time
+    const endTime = new Date(currentTime.getTime());
+    const startTime = new Date(currentTime.getTime());
+  
+    // Adjust startTime based on selected range
+    switch (selectedValue) {
+      case 1:
+        startTime.setUTCHours(startTime.getUTCHours() - 1);
+        break;
+      case 3:
+        startTime.setUTCHours(startTime.getUTCHours() - 3);
+        break;
+      case 6:
+        startTime.setUTCHours(startTime.getUTCHours() - 6);
+        break;
+      case 12:
+        startTime.setUTCHours(startTime.getUTCHours() - 12);
+        break;
+      case 24:
+        startTime.setUTCDate(startTime.getUTCDate() - 1);
+        break;
+      default:
+        break;
+    }
+  
+    // Format dates
+    const formatDate = (dateObj) => {
+      const year = dateObj.getUTCFullYear();
+      const month = (dateObj.getUTCMonth() + 1).toString().padStart(2, '0');
+      const day = dateObj.getUTCDate().toString().padStart(2, '0');
+      const hours = dateObj.getUTCHours().toString().padStart(2, '0');
+      const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+  
+    const startTimeFormatted = formatDateTime(formatDate(startTime));
+    const endTimeFormatted = formatDateTime(formatDate(endTime));
+    setXAxisMin(startTimeFormatted);
+    setXAxisMax(endTimeFormatted);
+    setTimeout(() => {
+      fetchFilters(startTimeFormatted, endTimeFormatted);
+    }, 1);
+  };
   
   
   const handleValueChange = (e) => {
@@ -287,7 +337,7 @@ if (xAxisMin >= xAxisMax) {
     setValue(e.target.value);
   };
   const getColumnType = (columnName) => {
-    console.log(columnName)
+   
 
     const column = columns.find(col => col.column_name === columnName);
     return column ? column.data_type : null;
@@ -392,20 +442,22 @@ if (xAxisMin >= xAxisMax) {
       "inventoryaccessplannobidreason",
       "trafficsource_content_language"
     ];
+    const tempTableGDCArrayColumn = ["deals_dealid","allowedcreativetypes","unifiedbannerdimensions","deals_auctiontype","campaignfrequencies_granularitykey","sourceblockedattributeids","contextualdataset_providername"];
 
     const isTempColumnPresent = tempTableGDCColumn.includes(tempValues[1]);
 
-    console.log(tempValues[1] + "" + isTempColumnPresent)
+    const isArrayColumn = columnType.includes('[]') || tempTableGDCArrayColumn.includes(tempValues[1]);
+
+   
     //temperory fix ends
     const isInOperator = value.includes(',');
-    console.log(filterColumn + " = " + columnType + " " + isInOperator + " " + value)
     let newCondition;
     const values = value.split(',').map(v => v.trim());
     if (value.toLowerCase().includes('null')) {
       newCondition = { field: filterColumn, operator: 'is', value: value };
     }
     else if (isInOperator) {// multi value
-      if (!columnType.includes('[]')) {  //non array type for multi value
+      if (!isArrayColumn) {  //non array type for multi value
 
         //temperory fix 
          if(isTempColumnPresent){
@@ -442,7 +494,7 @@ if (xAxisMin >= xAxisMax) {
         }
       }
     } else { // Single value
-      if (!columnType.includes('[]')) { //single value non arraytype
+      if (!isArrayColumn) { //single value non arraytype
         //temperory fix 
         if(isTempColumnPresent){
           newCondition = { field: filterColumn, operator: '=', value: `'${value}'`  };
@@ -475,7 +527,6 @@ if (xAxisMin >= xAxisMax) {
         }
       }
     }
-    console.log(newCondition)
     const updatedConditions = [...conditions, newCondition];
     setConditions(updatedConditions);
     setFilterColumn('');
@@ -524,7 +575,6 @@ if (xAxisMin >= xAxisMax) {
     const [date, time] = datetime.split('T');
     // Ensure the time includes seconds set to 00
     const timeWithSeconds = `${time}:00`;
-    console.log(date)
     return `${date} ${timeWithSeconds}`;
   };
 
@@ -558,130 +608,141 @@ if (xAxisMin >= xAxisMax) {
       hour: 'numeric',
       minute: '2-digit',
       year: 'numeric',
-      hour12: false,
-      timeZone: 'GMT'
+      hour12: false
     };
     return new Intl.DateTimeFormat('en-US', options).format(date);
   });
-  const options = {
-    chart: {
-      type: 'area',
-      zoomType: 'x',
-    },
-    title: {
-      text: 'Record Frequency by 5-Minute Interval',
-    },
-    xAxis: {
-      categories: formattedDates,
-      type: 'category',
-      title: {
-        text: 'Time',
+
+   const options = {
+      chart: {
+        type: 'histogram',
+        zoomType: 'xy', // Enable zoom on the x-axis
+        panning: true, // Enable panning
+        panKey: 'shift' // Pan with the shift key
       },
-      events: {
-        afterSetExtremes: function (e) {
-         
-          const minIndex = Math.round(e.max);
-          const maxIndex = Math.round(e.min);
-          const maxXValue = convertToCustomFormat(formattedDates[minIndex]);
-          const minXValue = convertToCustomFormat(formattedDates[maxIndex]);
-          setXAxisMin(minXValue);
-          setXAxisMax(maxXValue);
-         if(!isInitialMount.current){
-          console.log("charts")
-          fetchData(minXValue, maxXValue);
-          fetchRunCount(conditions, minXValue, maxXValue);
-         }
-        }
-      }
-    },
-    yAxis: {
       title: {
-        text: 'Record Count',
+        text: 'Request vs Time\n Hits'+runCountResult,
       },
-    },
-    credits: {
-      enabled: false
-    },
-    tooltip: {
-      headerFormat: 'time: <b>{point.x}</b><br>',
-      pointFormat: 'Count: <b>{point.y}</b><br>',
-    },
-    plotOptions: {
-      area: {
-        series: {
-          stacking: 'normal',
-          boostThreshold: 5000,
-          softThreshold: true,
-        },
-        lineColor: '#1146d8d2', // Blue line color
-        marker: {
-          radius: 2,
-        },
-        lineWidth: 1,
-        states: {
-          hover: {
-            lineWidth: 1,
-          },
-        },
-        threshold: null,
+      xAxis: {
+        categories: formattedDates,
+        type: 'category',
         title: {
           text: 'Time',
+        },
+        minRange: 2,
+        events: {
+          afterSetExtremes: function (e) {
+            // Capture drag and select time, not the chart's min & max points
+            const minIndex = Math.floor(e.max);
+            const maxIndex = Math.ceil(e.min);
+            const maxXValue = convertToCustomFormat(formattedDates[minIndex]);
+            const minXValue = convertToCustomFormat(formattedDates[maxIndex]);
+            setXAxisMin(minXValue);
+            setXAxisMax(maxXValue);
+            if (!isInitialMount.current) {
+              fetchData(minXValue, maxXValue);
+              fetchRunCount(conditions, minXValue, maxXValue);
+            }
+          }
         }
       },
+      yAxis: {
+        title: {
+          text: 'Record Count',
+        },
+      },
+      rangeSelector: {
+        buttons: [{
+            type: 'hour',
+            count: 1,
+            text: '1h'
+        }, {
+            type: 'day',
+            count: 1,
+            text: '1D'
+        }, {
+            type: 'all',
+            count: 1,
+            text: 'All'
+        }],
+        selected: 1,
+        inputEnabled: false,
+        enabled:true
     },
-    series: [
-      {
-        name: "Count",
-        data: avalues,
-      }
-    ],
-    legend: {
-      align: 'right',
-      verticalAlign: 'top',
-      layout: 'vertical',
-      x: -10,
-      y: 25,
-      backgroundColor:
-        Highcharts.defaultOptions.legend.backgroundColor || '#FFFFFF'
-    },
-    responsive: {
-      rules: [
-        {
-          condition: {
-            maxWidth: 500,
+      credits: {
+        enabled: false
+      },
+      tooltip: {
+        headerFormat: 'time: <b>{point.x}</b><br>',
+        pointFormat: 'Count: <b>{point.y}</b><br>',
+      },
+      plotOptions: {
+        column: {
+          pointPadding: 0.2,
+          borderWidth: 0,
+          pointPlacement: 'left' // Align bars correctly with x-axis values
+        },
+        histogram: {
+          binWidth: 0.1, // Adjust the bin width as needed
+          boostThreshold: 1,
+          softThreshold: true,
+          lineColor: '#1146d8d2', // Blue line color
+          marker: {
+            radius: 1,
           },
-          chartOptions: {
-            legend: {
-              layout: 'horizontal',
-              align: 'center',
-              verticalAlign: 'bottom',
+          lineWidth: 1,
+          states: {
+            hover: {
+              lineWidth: 1,
             },
           },
+          threshold: null,
+          title: {
+            text: 'Time',
+          }
         },
+      },
+      series: [
+        {
+          name: "Count",
+          data: avalues, // Ensure this data is appropriate for histogram
+        }
       ],
-    },
+      legend: {
+        align: 'right',
+        verticalAlign: 'top',
+        layout: 'vertical',
+        x: 0,
+        y: 0,
+        backgroundColor:
+          Highcharts.defaultOptions.legend.backgroundColor || '#FFFFFF'
+      },
+      responsive: {
+        rules: [
+          {
+            condition: {
+              maxWidth: 500,
+            },
+            chartOptions: {
+              legend: {
+                layout: 'horizontal',
+                align: 'center',
+                verticalAlign: 'bottom',
+              },
+            },
+          },
+        ],
+      },
   };
   const isInitialMount = useRef(true);
   useEffect(() => {
     if (isInitialMount.current) {
-      
-     // const yesterday = subDays(new Date(), 1);
-     // const defaultDateTime =  format(yesterday, "yyyy-MM-dd'T'HH:mm");
-     // setXAxisMin(defaultDateTime);
-      console.log(xAxisMin);
- 
       filtersColumn();
-
-      
-      
-     // fetchFilters();
     }
   }, []);
 
   const handleOnChangeDropDown = (values) => {
     setSelectedValues(values);
-    // Handle selected values here
-    console.log('Selected values:', values);
   };
 
   const escapeOperandAttributeSelector = (operand) => {
@@ -851,19 +912,6 @@ if (xAxisMin >= xAxisMax) {
                 </div>
               </>)}
           
-          
-          <div >
-            <Typography variant="p" style={{ marginTop: '30px' }} className="card-header">Count of Records<WhiteIconButton onClick={toggleCountDropdown}>
-              <ArrowDropDownIcon />
-            </WhiteIconButton></Typography>
-            
-            {showcountPreview && (
-              <>
-                <h4>{runCountResult}</h4>
-              </>
-            )}
-          </div>
-          
           <Typography variant="p" style={{ marginTop: '25px' }} className="card-header">Choose Column to display<WhiteIconButton onClick={toggleshowColumnSelectDropdown} >
               <ArrowDropDownIcon />
             </WhiteIconButton></Typography>
@@ -919,9 +967,36 @@ if (xAxisMin >= xAxisMax) {
             </div>
         </Grid>
         <Grid item xs={10}>
-
+        <DialogActions style={{ display: 'flex', justifyContent: 'space-between' }}>
+            {/* Other buttons */}
+            <div style={{ marginLeft: 'auto' }}>
+            <Select
+              sx={{ width: 200, height: 30 }}
+        value={chartselect}
+        onChange={handleChartChange}
+        disabled={disableButton}
+        displayEmpty // Make sure the placeholder is displayed when no value is selected
+        renderValue={(selected) => {
+          if (selected === '') {
+            return <em>Select chart time</em>; // Placeholder text
+          }
+          return valueToNameMap[selected];
+        }}
+      >
+             <MenuItem  value={1}>last 1h</MenuItem>
+             <MenuItem  value={3}>last 3h</MenuItem>
+             <MenuItem  value={6}>last 6h</MenuItem>
+             <MenuItem  value={12}>last 12h</MenuItem>
+             <MenuItem  value={24}>last 1d</MenuItem>
+             </Select>
+            </div>
+          </DialogActions>
           {loading ? <CircularProgress size={50} /> : null}
-          <HighchartsReact highcharts={Highcharts} options={options} />
+          {/* <HighchartsReact highcharts={Highcharts} options={options} /> */}
+          <HighchartsReact
+      highcharts={Highcharts}
+      options={options}
+    />
           <DialogActions style={{ display: 'flex', justifyContent: 'space-between' }}>
             {/* Other buttons */}
             <div style={{ marginLeft: 'auto' }}>
