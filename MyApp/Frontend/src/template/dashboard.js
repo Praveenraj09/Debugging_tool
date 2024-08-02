@@ -14,64 +14,88 @@ function Dashboard() {
   const [tables, setTables] = useState([]);
   const [tablerows, setTablerows] = useState([]);
   const [tablecolumns, setTablecolumns] = useState([]);
-  
+  const [token, setToken] = useState(null);
+
   useEffect(() => {
-   
+    const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+    const accessToken = storedToken?.accessToken?.accessToken;
+    
+    setToken(accessToken); 
     fetchData();
     fetchTableInfo();
+    
   }, []);
-  const fetchData = async()=>{
-    const response = await axios.get('/api/dashboard');
-    const data = response.data;
-    setSchemacount(data.schemacount);
-    setCounts(data.counts);
-    setSchemas(data.schemas);
-    setTables(data.tables);
-    setLoading(false);
-  }
+  const fetchData = async () => {
+    try {
+        const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+        const accessToken = storedToken?.accessToken?.accessToken;
+
+        if (!accessToken) {
+            throw new Error('Access token is missing');
+        }
+
+        const response = await axios.get('/api/dashboard', {
+            headers: {
+                'Authorization': `Bearer ${accessToken}`
+            }
+        });
+
+        if (response.status === 200) {
+            const data = response.data;
+            setSchemacount(data.schemacount);
+            setCounts(data.counts);
+            setSchemas(data.schemas);
+            setTables(data.tables);
+        } else {
+            console.error('Unexpected response status:', response.status);
+        }
+        
+        setLoading(false);
+    } catch (error) {
+        console.error('Error fetching data:', error);
+    }
+};
+
+  
   const fetchTableInfo = async () => {
     try {
-      const response = await axios.get('/api/fetch_TableInfo');
-      console.log(response.data.columnName)
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.get('/api/fetch_TableInfo', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+      console.log(response.data.columnName);
       const data = response.data.data;
       const columns = response.data.columnName;
-      console.log(data)
-
+      console.log(data);
+  
       // Transform columns data to fit DataGrid columns format
       const columnsData = columns.map((col) => ({
         field: col,
         headerName: col.replace('_', ' ').toUpperCase(),
-        width: 250, 
+        width: 250,
       }));
-
+  
       setTablecolumns(columnsData);
-
+  
       // Add unique id to each row for DataGrid
       const updatedRows = data.map((table, index) => ({
         id: index + 1,
         ...table,
       }));
-
+  
       setTablerows(updatedRows);
-
+  
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching table info:', error);
     } finally {
       setLoading(false);
     }
-    axios.interceptors.request.use(
-      config => {
-        const token = localStorage.getItem('token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      error => {
-        return Promise.reject(error);
-      }
-    );
-  }
+  };
+
   return (
     <div className="container-fluid mt-5">
     <Navbar/>

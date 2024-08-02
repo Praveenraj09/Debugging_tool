@@ -30,8 +30,8 @@ public class QueryService {
 	@Autowired
 	private ReportConfig reportConfig;
 
-	@Value("${ocient.db.dbname}")
-	private String db;
+//	@Value("${ocient.db.dbname}")
+//	private String db;
 
 	@Value("${ocient.db.schema}")
 	private String schema;
@@ -62,6 +62,9 @@ public class QueryService {
 
 	@Value("${ocient.db.jointable1}")
 	private String joinTable1;
+	
+	@Value("${ocient.db.jointable2}")
+	private String joinTable2;
 
 	@Value("${ocient.db.jointable1_primaryid}")
 	private String joinTable1PrimaryId;
@@ -85,6 +88,13 @@ public class QueryService {
 
 	@Value("${ocient.db.rawTable_primaryid}")
 	private String rawtable_primaryid;
+
+	@Value("${ocient.db.defaultColumns_join}")
+	private String default_column_join;
+	
+	@Value("${ocient.db.defaultColumns_nojoin}")
+	private String default_column_nonjoin;
+
 
 
 
@@ -173,25 +183,43 @@ public class QueryService {
 
 	    if (joinRequired) {
 	        // Select all columns from primary table
-	        queryBuilder.append("SELECT '").append(joinTable1).append("' || '.' || c1.column_name AS column_name, c1.data_type as data_type ")
-	                    .append("FROM information_schema.columns c1 ")
-	                    .append("WHERE c1.table_schema = '").append(schema).append("' ")
-	                    .append("AND c1.table_name = '").append(joinTable1).append("' ")
-	                    .append("UNION ALL ");
-
-	          
-	                
-	                queryBuilder.append("SELECT '").append(viewTable).append("' || '.' || c2.column_name AS column_name, c2.data_type as data_type  ")
-	                            .append("FROM information_schema.columns c2 ")
-	                            .append("LEFT JOIN information_schema.columns c1 ")
-	                            .append("ON c1.column_name = c2.column_name ")
-	                            .append("AND c1.table_name = '").append(joinTable1).append("' ")
-	                            .append("AND c1.table_schema = '").append(schema).append("' ")
-	                            .append("WHERE c2.table_schema = '").append(schema).append("' ")
-	                            .append("AND c2.table_name = '").append(viewTable).append("' ")
-	                            .append("AND c1.column_name IS NULL ");
+//	        queryBuilder.append("SELECT '").append(joinTable1).append("' || '.' || c1.column_name AS column_name, c1.data_type as data_type ")
+//	                    .append("FROM information_schema.columns c1 ")
+//	                    .append("WHERE c1.table_schema = '").append(schema).append("' ")
+//	                    .append("AND c1.table_name = '").append(joinTable1).append("' ")
+//	                    .append("UNION ALL ");
+//
+//	                
+//	                queryBuilder.append("SELECT '").append(viewTable).append("' || '.' || c2.column_name AS column_name, c2.data_type as data_type  ")
+//	                            .append("FROM information_schema.columns c2 ")
+//	                            .append("LEFT JOIN information_schema.columns c1 ")
+//	                            .append("ON c1.column_name = c2.column_name ")
+//	                            .append("AND c1.table_name = '").append(joinTable1).append("' ")
+//	                            .append("AND c1.table_schema = '").append(schema).append("' ")
+//	                            .append("WHERE c2.table_schema = '").append(schema).append("' ")
+//	                            .append("AND c2.table_name = '").append(viewTable).append("' ")
+//	                            .append("AND c1.column_name IS NULL ");
 	            
-	        
+	                queryBuilder.append("SELECT '").append(joinTable1).append("'||'.' || column_name AS column_name, data_type ")
+	                .append(" FROM information_schema.columns ")
+	                .append(" WHERE table_schema = '").append(schema).append("' AND table_name = '").append(joinTable1).append("' ")	                
+	                .append(" UNION ALL ");
+
+	                queryBuilder.append("SELECT '").append(viewTable).append("'||'.' || column_name AS column_name, data_type ")
+	                .append(" FROM information_schema.columns ")
+	                .append(" WHERE table_schema = '").append(schema).append("' AND table_name = '").append(viewTable).append("' ")	                
+	                .append(" AND column_name NOT IN (SELECT column_name FROM information_schema.columns WHERE table_schema = '")
+	                .append(schema).append("' AND table_name = '").append(joinTable1).append("')")
+	                .append(" UNION ALL ");
+
+	                queryBuilder.append("SELECT '").append(joinTable2).append("'||'.' || column_name AS column_name, data_type ")
+	                .append(" FROM information_schema.columns ")
+	                .append(" WHERE table_schema = '").append(schema).append("' AND table_name = '").append(joinTable2).append("' ")	                
+	                .append(" AND column_name NOT IN (SELECT column_name FROM information_schema.columns WHERE table_schema = '")
+	                .append(schema).append("' AND table_name IN ('").append(viewTable).append("', '").append(joinTable1).append("') ) ");
+	                
+	                
+ 
 	    } else {
 	        // Select all columns from the primary table
 	        queryBuilder.append("SELECT c.table_name || '.' || c.column_name AS column_name, c.data_type as data_type  ")
@@ -200,7 +228,7 @@ public class QueryService {
 	                    .append("AND c.table_name = '").append(viewTable).append("' ");
 	    }
 
-	    queryBuilder.append("ORDER BY column_name");
+	    queryBuilder.append(" ORDER BY column_name");
 	    String query = queryBuilder.toString();
 	    return runQuery(query);
 	}
@@ -238,20 +266,43 @@ public class QueryService {
 
 				// Get conditions, defaulting to an empty string if null
 				String conditions = (String) payload.getOrDefault("conditions", "");
+				List<Map<String, Object>> columns = (List<Map<String, Object>>) payload.get("columns");
 				
+				boolean isAuctionDetailsPresent = checkJoinTables(conditions,columns,"auction_details");
+				
+				boolean isRepositoryPresent = checkJoinTables(conditions,columns,"repository");
+
 				String query = "";
 				if(joinRequired) {
-					query+="SELECT DATE_TRUNC('minute', "+ viewTables+"."+timeColumn+") - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM "+ viewTables+"."+timeColumn+")::INT % "+chart_frequncy+") "
+					query+="SELECT DATE_TRUNC('minute', "+ joinTable1+"."+timeColumn+") - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM "+ joinTable1+"."+timeColumn+")::INT % "+chart_frequncy+") "
 							+ " AS time_range_start, "
-							+ " DATE_TRUNC('minute', "+ viewTables+"."+timeColumn+") - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM "+ viewTables+"."+timeColumn+")::INT % "+chart_frequncy+") + "
+							+ " DATE_TRUNC('minute', "+ joinTable1+"."+timeColumn+") - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM "+ joinTable1+"."+timeColumn+")::INT % "+chart_frequncy+") + "
 							+ " INTERVAL '"+chart_frequncy+" minute' AS time_range_end, "
-							+ " COUNT(*) AS record_count FROM "+schema+"."+ viewTables+" INNER JOIN "+schema+"."+joinTable1+" ON "+ viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "
-							+ viewTables+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" "
-							+ " WHERE "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"'  AND "
-							+ " "+joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+joinTable1+"."+timeColumn+" <= '"+maxTime+"' "
-							+ " "+(!conditions.isBlank() ? "AND " + conditions : "") +" "
-							+ " GROUP BY time_range_start, time_range_end ORDER BY time_range_start DESC LIMIT "+chart_points;
-				}
+							+ " COUNT(*) AS record_count FROM "+schema+"."+joinTable1 ;
+					if(isAuctionDetailsPresent) {
+						query +=" LEFT OUTER JOIN "+schema+"."+viewTables+" ON "+ viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "
+								+ viewTables+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
+						
+					}
+					if(isRepositoryPresent) {
+						query +=" LEFT OUTER JOIN "+schema+"."+joinTable2+" ON "+ joinTable2+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "
+								+ joinTable2+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
+						
+					}
+					
+					query+= " WHERE "+joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+joinTable1+"."+timeColumn+" <= '"+maxTime+"' ";
+							
+					if(isAuctionDetailsPresent) {
+						query+=" AND "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"'   "+ " ";
+					}
+					if(isRepositoryPresent) {
+						query+=" AND "+ joinTable2+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable2+"."+timeColumn+" <= '"+maxTime+"'   "+ " ";
+					}
+					query+= " "+(!conditions.isBlank() ? "AND " + conditions : "") +" "
+								+ " GROUP BY time_range_start, time_range_end ORDER BY time_range_start DESC LIMIT "+chart_points;
+					}
+					
+				
 				else {
 					query += String.format(
 							"SELECT DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) AS time_range_start, "
@@ -287,16 +338,19 @@ public class QueryService {
 		return response;
 	}
 
-	public List<Map<String, Object>> getChartData(Map<String, String> payload) {
-		String selectedTimeFrame = payload.get("time-frame");
-		int timeCondition = selectedTimeFrame.equals("1min") ? 1 : selectedTimeFrame.equals("3min") ? 3 : 5;
+	public static boolean checkJoinTables(String conditions, List<Map<String, Object>> columns, String valueToCheck) {
+        // Check if conditions contain the valueToCheck
+        boolean conditionsCheck = (conditions != null && conditions.toLowerCase().contains(valueToCheck));
+        
+        // Check if columns contain the valueToCheck in column_name
+        boolean columnsCheck = (!columns.isEmpty() && columns.stream()
+                                                             .anyMatch(column -> column.get("column_name") != null && 
+                                                                                 column.get("column_name").toString().toLowerCase().contains(valueToCheck)));
 
-		String query = String.format(
-				"SELECT DATE_TRUNC('minute', %s) - INTERVAL '1 minute' * (EXTRACT(MINUTE FROM %s)::INT %% %d) AS xaxis, "
-						+ "COUNT(DISTINCT request_id) AS axis FROM %s.%s GROUP BY xaxis ORDER BY xaxis DESC limit %d",
-				timeColumn, timeColumn, timeCondition, schema, viewTable, rowCount);
-		return runQuery(query);
-	}
+        // Return true if either conditionsCheck or columnsCheck is true
+        return conditionsCheck || columnsCheck;
+    }
+
 
 	public Map<String, Object> fetchData(Map<String, Object> payload) {
 		String viewTables = (String) payload.getOrDefault("viewTable", viewTable);
@@ -323,24 +377,21 @@ public class QueryService {
 
 		// Get conditions, defaulting to an empty string if null
 		String conditions = (String) payload.getOrDefault("conditions", "");
-
-		// If columns are not provided in payload, get default columns
-		if (columns == null || columns.isEmpty()) {
-			Map<String, Object> timeColumnMap = new HashMap<>();
-		    timeColumnMap.put("column_name", ((joinRequired)?(joinTable1+ "." + timeColumns):(viewTables+ "." + timeColumns)) ); // Assuming the key for column name is "name"
-		    
-		    Map<String, Object> defaultColumnMap = new HashMap<>();
-		    defaultColumnMap.put("column_name", ((joinRequired)?(joinTable1+ "." + default_column):(viewTables+ "." + default_column))); // Assuming the key for column name is "name"
-		    
-		    columns = Arrays.asList(timeColumnMap, defaultColumnMap); // Assuming getColumns() retrieves default columns
-		}
-
-		// Construct column names string for SQL query
-//		String columnNames = columns.stream().map(column -> "" + column.get("column_name") + " as \""+column.get("column_name")+"\" ")
-//				.collect(Collectors.joining(", "));
+		boolean isAuctionDetailsPresent = checkJoinTables(conditions,columns,"auction_details");
 		
-		//added for auctionid changes binary to string
-		 String columnNames = columns.stream()
+		boolean isRepositoryPresent = checkJoinTables(conditions,columns,"repository");
+
+		 String columnNames = "";
+		 if(joinRequired) {
+			 columnNames += default_column_join ;			 
+		 }
+		 else {
+			 columnNames += default_column_nonjoin;
+		 }
+		 System.out.println(columns.isEmpty());
+		 if(columns != null && !columns.isEmpty()) {
+			 columnNames+= " , ";
+			 columnNames+= columns.stream()
 		            .map(column -> {
 		                String columnName = (String) column.get("column_name");
 		                if ("auction.auctionid".equals(columnName) || "auction_details.auctionid".equals(columnName)) {
@@ -350,19 +401,34 @@ public class QueryService {
 		                }
 		            })
 		            .collect(Collectors.joining(", "));
+		 }
 		 
-		 
-		System.out.println(columnNames);
-		String query = "SELECT "+columnNames+" FROM "+schema+"."+viewTables+" ";
+		String query ="";
+		
 		if(joinRequired) {
-			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ viewTables+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
+			query+="SELECT "+columnNames+" FROM "+schema+"."+joinTable1+" ";
+			if(isAuctionDetailsPresent) {
+				query+=" LEFT OUTER JOIN "+schema+"."+viewTables+" ON "+viewTables+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ viewTables+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";				
+			}
+			if(isRepositoryPresent) {
+				query+=" LEFT OUTER JOIN "+schema+"."+joinTable2+" ON "+joinTable2+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ joinTable2+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";				
+			}
+			query+= " WHERE "+ joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable1+"."+timeColumn+" <= '"+maxTime+"' ";
+			
+			if(isAuctionDetailsPresent) {
+				query+= " AND "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"' ";
+			}
+			if(isRepositoryPresent) {
+				query+= " AND "+ joinTable2+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable2+"."+timeColumn+" <= '"+maxTime+"' ";
+			}
+			query+=		 (!conditions.isBlank() ? "AND " + conditions : "")+" LIMIT "+rowCount;
 		}
-		query+= " WHERE "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"' ";
-		if(joinRequired) {
-			query+= " AND "+ joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable1+"."+timeColumn+" <= '"+maxTime+"' ";
+		else {
+			query+="SELECT "+columnNames+" FROM "+schema+"."+viewTable+" ";
+			query+= " WHERE "+ viewTables+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTables+"."+timeColumn+" <= '"+maxTime+"' ";
+			query+=		 (!conditions.isBlank() ? "AND " + conditions : "")+" LIMIT "+rowCount;
 		}
-		query+=		 (!conditions.isBlank() ? "AND " + conditions : "")+" LIMIT "+rowCount;
-		 
+		
 
 		// Log the constructed query for debugging
 
@@ -377,95 +443,8 @@ public class QueryService {
 		return response;
 	}
 	
-	public List<Map<String, Object>> runCount(Map<String, Object> payload) {
-		String conditions = (String) payload.get("conditions");
-		String minTime = (String) payload.get("minTime");
-		String maxTime = (String) payload.get("maxTime");
-		if (maxTime == null)
-			maxTime = ConvertionFunction.convertDate(new Date());
-		if (minTime == null) {
-			Calendar calendar = Calendar.getInstance();
-			calendar.add(Calendar.DAY_OF_MONTH, -1);
-			Date previousDate = calendar.getTime();
-			minTime = ConvertionFunction.convertDate(previousDate);
 
-		}
-		System.out.println(conditions + " " + minTime + " " + maxTime);
-		String query = "SELECT count(*) AS counts FROM "+schema+"."+viewTable+" ";
-		if(joinRequired) {
-			query+=" INNER JOIN "+schema+"."+joinTable1+" ON "+viewTable+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ viewTable+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
-		}
-		query+= " WHERE "+ viewTable+"."+timeColumn+" >= '"+minTime+"' AND "+ viewTable+"."+timeColumn+" <= '"+maxTime+"' ";
-		if(joinRequired) {
-			query+= " AND "+ joinTable1+"."+timeColumn+" >= '"+minTime+"' AND "+ joinTable1+"."+timeColumn+" <= '"+maxTime+"' ";
-		}
-		query+=		 (!conditions.isBlank() ? "AND " + conditions : "");
-		 
-//
-//		String query = String.format("SELECT COUNT(*) AS counts FROM %s.%s WHERE %s <= '%s' %s", schema, viewTable,
-//				timeColumn, maxTime != null ? maxTime : ConvertionFunction.convertDate(new Date()),
-//				minTime != null ? "AND " + timeColumn + " >= '" + minTime + "'" : "");
-//		if (null != conditions && !conditions.isBlank()) {
-//			query += " AND " + conditions;
-//		}
-		return runQuery(query);
-	}
 
-	public Map<String, Object> getCharts() {
-		String query = "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = '" + schema
-				+ "'";
-		List<Map<String, Object>> data = runQuery(query);
-
-		Map<String, List<String>> tables = new HashMap<>();
-		for (Map<String, Object> row : data) {
-			String tableName = (String) row.get("table_name");
-			String columnName = (String) row.get("column_name");
-			if (!tables.containsKey(tableName)) {
-				tables.put(tableName, new ArrayList<>());
-			}
-			tables.get(tableName).add(columnName);
-		}
-
-		Map<String, Object> response = new HashMap<>();
-		response.put("tables", tables);
-		return response;
-	}
-
-	public Map<String, Object> generateChart(Map<String, Object> payload) {
-		String selectedTable = (String) payload.get("filterTable");
-		String selectedColumn = (String) payload.get("filterColumn");
-		int selectedLimit = (Integer) payload.get("filterSelect");
-
-		String query = String.format("SELECT %s, COUNT(*) AS count FROM %s.%s GROUP BY %s LIMIT %d",
-				selectedColumn, schema, selectedTable, selectedColumn, selectedLimit);
-		List<Map<String, Object>> data = runQuery(query);
-
-		Map<String, Object> response = new HashMap<>();
-		response.put("result", data);
-		return response;
-	}
-
-//	private List<Map<String, Object>> runQuery(String query) {
-//		System.out.println("Query Started:"+query);
-//		List<Map<String, Object>> result = new ArrayList<>();
-//		try (Connection conn = connection.getConnection();
-//				Statement stmt = conn.createStatement();
-//				ResultSet rs = stmt.executeQuery(query)) {
-//			System.out.println("Query Executed:"+query);
-//			System.out.println("Data Started processing:"+query);
-//			while (rs.next()) {
-//				Map<String, Object> row = new HashMap<>();
-//				for (int i = 1; i <= rs.getMetaData().getColumnCount(); i++) {
-//					row.put(rs.getMetaData().getColumnName(i), rs.getObject(i));
-//				}
-//				result.add(row);
-//			}
-//			System.out.println("Data Processed:"+query);
-//		} catch (Exception e) {
-//			e.printStackTrace();
-//		}
-//		return result;
-//	}
 	private List<Map<String, Object>> runQuery(String query) {
 		System.out.println("Query Started: " + query);
 		List<Map<String, Object>> result = new ArrayList<>();
@@ -487,7 +466,8 @@ public class QueryService {
 				Map<String, Object> row = new HashMap<>(columnCount);
 				for (String columnName : columnNames) {
 					//convert the arrayObject data to list
-					Object obj = rs.getObject(columnName);					
+					Object obj = rs.getObject(columnName);	
+					
 					if(null==obj) {
 						row.put(columnName, "NULL");
 					}
@@ -499,6 +479,9 @@ public class QueryService {
 						//row.put(columnName, convertToHex(rs.getObject(columnName).toString()));
 						//auction id changes binary to string
 						row.put(columnName, rs.getObject(columnName).toString());
+					}
+					else if(obj.getClass().toString().contains("XGTimestamp")) {
+						row.put(columnName, rs.getObject(columnName));
 					}
 					else {
 						row.put(columnName, rs.getObject(columnName));
@@ -520,18 +503,7 @@ public class QueryService {
 
 		return result;
 	}
-	public static String convertToHex(Object rawValue) {
-        if (rawValue instanceof String) {
-            String rawString = (String) rawValue;
-            // Convert the string to hexadecimal format
-            StringBuilder hexString = new StringBuilder("0x");
-            for (char ch : rawString.toCharArray()) {
-                hexString.append(String.format("%02x", (int) ch));
-            }
-            return hexString.toString();
-        }
-        return rawValue.toString();
-    }
+
 	public List<Map<String, Object>> getTablefromDB() {
 		String q_tables = "SELECT table_name as tablename FROM information_schema.tables where table_schema = '"
 				+ schema + "'";
@@ -540,30 +512,12 @@ public class QueryService {
 		return result;
 	}
 
-	public Map<String, Object> filterTable(Map<String, Object> payload) {
-		Map<String, Object> response = new HashMap<>();
-
-		// Get columns
-		List<Map<String, Object>> columns = getColumns(viewTable);
-		response.put("columns", columns);
-
-		// Fetch data
-		String conditions = (String) payload.get("conditions");
-		String minTime = (String) payload.get("minTime");
-		String maxTime = (String) payload.get("maxTime");
-		payload.put("columns", columns);
-		// response.put("datas", fetchData(payload));
-		// Run count
-		List<Map<String, Object>> runcount = runCount(schema, viewTable, timeColumn, conditions, minTime, maxTime);
-		response.put("runCount", runcount);
-		System.out.println(runcount.toString());
-		return response;
-	}
-
-	public List<Map<String, Object>> getColumns(String viewTable) {
-		String query = "SELECT column_name FROM information_schema.columns WHERE table_name = '" + viewTable + "'";
-		return runQuery(query);
-	}
+	
+//
+//	public List<Map<String, Object>> getColumns() {
+//		String query = "SELECT column_name FROM information_schema.columns WHERE table_name = '" + viewTable + "'";
+//		return runQuery(query);
+//	}
 
 	// Run count
 	public List<Map<String, Object>> runCount(String schema, String viewTable, String timeColumn, String conditions,
@@ -638,18 +592,58 @@ public class QueryService {
 
 	public List<Map<String, Object>> getRawData(Map<String, Object> payload) {
 		String auctionid = (String) payload.get("auctionid");
-		String minTime = (String) payload.get("minTime");
-		String maxTime = (String) payload.get("maxTime");
-		if (maxTime == null)
-			maxTime = ConvertionFunction.convertDate(new Date());
-		if (minTime == null) {
-			Calendar calendar = Calendar.getInstance();
-			calendar.add(Calendar.DAY_OF_MONTH, -1);
-			Date previousDate = calendar.getTime();
-			minTime = ConvertionFunction.convertDate(previousDate);
-		}
-		String query = "SELECT auctionid,created,record_type,networkid,traffictype,rawrequest,rawresponse from "+schema+"."+rawtable+" WHERE ("+rawtable+"."+rawtable_primaryid +" = binary('0x"+auctionid+"')) AND "
-				+ rawtable+"."+timeColumn+" >= '"+minTime+"' AND "+ rawtable+"."+timeColumn+" <= '"+maxTime+"'";
+		String created = (String) payload.get("created");
+		int recordtype = (int) payload.get("recordtype");
+		String start = created.replace("T", " ").substring(0,19);
+//		String temp= created.replace("T", " ");System.out.println(temp);
+//		String[] value = temp.split("\\.",2);System.out.println(value.toString());
+//		System.out.println(value[0]);
+//		System.out.println(start+"."+value[1].replaceAll("[+:]","0"));
+		
+		String query = "SELECT rawrequest from "+schema+"."+rawtable+" WHERE ("+rawtable+"."+rawtable_primaryid +" = binary('0x"+auctionid+"')) AND "
+				+ rawtable+"."+timeColumn+" >= '"+start+"' AND "
+				+rawtable+"."+timeColumn+" <= DATEADD(minute,1, '"+start+"') "
+				+" AND "+ rawtable+"."+joinTable1PrimaryId1+" = "+recordtype+"";
+		return runQuery(query);
+	}
+
+	public List<Map<String, Object>> getAllData(Map<String, Object> payload) {
+		List<Map<String, Object>> columns = (List<Map<String, Object>>) payload.get("columns");
+		String auctionid = (String) payload.get("auctionid");
+		String created = (String) payload.get("created");
+		int recordtype = (int) payload.get("recordtype");
+		String start = created.replace("T", " ").substring(0,19);
+
+		String columnNames = "";
+		 
+		 if(columns != null && !columns.isEmpty()) {
+			 columnNames+= columns.stream()
+		            .map(column -> {
+		                String columnName = (String) column.get("column_name");
+		                if ("auction.auctionid".equals(columnName) || "auction_details.auctionid".equals(columnName)) {
+		                    return " SUBSTRING(char(" + columnName + "), 3) as \"" + columnName + "\" ";
+		                } else {
+		                    return columnName + " as \"" + columnName + "\" ";
+		                }
+		            })
+		            .collect(Collectors.joining(", "));
+		 }
+		String query = "SELECT "+columnNames+" from "+schema+"."+joinTable1+" ";
+				if(joinRequired) {
+					query+=" LEFT OUTER JOIN "+schema+"."+viewTable+" ON "+viewTable+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ viewTable+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
+					query+=" LEFT OUTER JOIN "+schema+"."+joinTable2+" ON "+joinTable2+"."+viewable_primaryId+" = "+joinTable1+"."+joinTable1PrimaryId+" AND "+ joinTable2+"."+viewable_primaryId1+" = "+joinTable1+"."+joinTable1PrimaryId1+" ";
+					
+				}
+				query+= " WHERE "+ viewTable+"."+timeColumn+" >= '"+start+"' AND "+ viewTable+"."+timeColumn+" <= DATEADD(second,1, '"+start+"')";
+				if(joinRequired) {
+					query+= " AND "+ joinTable1+"."+timeColumn+" >= '"+start+"' AND "+ joinTable1+"."+timeColumn+" <= DATEADD(second,1, '"+start+"')";
+					query+=" AND ("+joinTable1+"."+rawtable_primaryid +" = binary('0x"+auctionid+"')) ";
+					query+= " AND "+ joinTable2+"."+timeColumn+" >= '"+start+"' AND "+ joinTable2+"."+timeColumn+" <= DATEADD(minute,1, '"+start+"')";
+					query+=" AND ("+joinTable2+"."+rawtable_primaryid +" = binary('0x"+auctionid+"')) ";
+					
+				}
+				query+=" AND ("+viewTable+"."+rawtable_primaryid +" = binary('0x"+auctionid+"')) ";
+		
 		return runQuery(query);
 	}
 

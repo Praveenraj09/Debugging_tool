@@ -12,13 +12,16 @@ function Navbar() {
   const [anchorEl, setAnchorEl] = useState(null);
   const [reportOptions,setReportOptions] = useState(['Report'])
   useEffect(() => {
-    axios.get('/api/report')
-      .then(response => {
-        setReportOptions(response.data);
-      })
-      .catch(error => {
-        console.error('Error fetching report options:', error);
+    const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response  =axios.get('/api/report', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
       });
+      setReportOptions(response.data);
+     
   }, []);
   const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);
@@ -49,7 +52,7 @@ function Navbar() {
       <Toolbar>
         <img variant="h6" src={image} alt="Ocient Logo" width="100" height="20" />
         <Button variant="h6" color="inherit" href="/dashboard" sx={{ marginLeft: '10px' }}>Dashboard</Button>
-        <Button variant="h6" color="inherit" href="/filters" sx={{ marginLeft: '10px' }}>Debug</Button>
+        <Button variant="h6" color="inherit" href="/filters" sx={{ marginLeft: '10px' }}>TroubleShooting</Button>
         { <Button variant="h6" color="inherit" href="/tables" sx={{ marginLeft: '10px' }}>Tables</Button>
        /*<Button variant="h6" color="inherit" href="/charts" sx={{ marginLeft: '10px' }}>Charts</Button>
         <Button variant="h6" color="inherit" href="/mapview" sx={{ marginLeft: '10px' }} >MapView</Button> 

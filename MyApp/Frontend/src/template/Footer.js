@@ -15,8 +15,8 @@ function Footer() {
           bottom: 0;
           width: 100%;
           background-color: #f8f9fc; /* Set your desired background color */
-          color: #6c757d; /* Set your desired text color */
-          padding: 10px 0;
+          color: black; /* Set your desired text color */
+          padding: 2px 0;
           text-align: center;
         }
       `}</style>

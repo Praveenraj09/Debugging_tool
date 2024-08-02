@@ -3,26 +3,30 @@ import { Paper } from '@mui/material';
 
 const PrettyPrintTooltip = ({ value }) => {
   // Helper function to pretty-print JSON values
+  console.log(value)
   const prettyPrint = (val) => {
     if (Array.isArray(val)) {
       return `[\n${val.map(item => `  ${prettyPrint(item)}`).join(',\n')}\n]`;
     } else if (typeof val === 'object' && val !== null) {
-      return JSON.stringify(val, null, 2).replaceAll('\{\\\"', '\{\n"')
+      return JSON.stringify(val, null, 2)
+      .replaceAll('\{\\\"', '{\n\t"')
+      .replaceAll('\\\\n"', '\n\t')
       .replaceAll('\\\"','"')
       .replaceAll('\\\\\"','"')
       .replaceAll('\}','\n}')
       .replaceAll('\[\"','[\n"')
-      .replaceAll('\]',']\n')
-      .replaceAll(',\"',',\n"');// Replace escaped quotes with actual quotes
+      .replaceAll('\]',']')
+      .replaceAll(',\"',',\n\t"');// Replace escaped quotes with actual quotes
     } else {
-      return JSON.stringify(val)
-      .replaceAll('\{', '\{\n\t')
+      return JSON.stringify(val,null,2)
+      .replaceAll('\\n"', '\n')
+      .replaceAll('\{', '{\n')
       .replaceAll('\\\"','"')
       .replaceAll('\\\\\"','"')
       .replaceAll('\}','\n}')
       .replaceAll('\[\"','[\n"')
-      .replaceAll('\]',']\n')
-      .replaceAll(',\"',',\n"');
+      .replaceAll('\]',']')
+      .replaceAll(',\"',',\n\t"');
     }
   };
 
@@ -30,8 +34,10 @@ const PrettyPrintTooltip = ({ value }) => {
   let parsedValue;
   try {
     parsedValue = JSON.parse(value);
+    console.log("prettyprint"+parsedValue)
   } catch (error) {
     // If parsing fails, fall back to displaying the raw string
+    console.log("prettyprint error"+value)
     parsedValue = value;
   }
 

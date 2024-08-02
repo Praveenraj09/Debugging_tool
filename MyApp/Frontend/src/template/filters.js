@@ -21,6 +21,7 @@ import { CopyToClipboard } from 'react-copy-to-clipboard';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import PrettyPrintTooltip from './prettyprint'; // Assuming you have a PrettyPrintTooltip component
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import CloseIcon from '@mui/icons-material/Close';
 function Filters() {
   const [conditions, setConditions] = useState([]);
   const [selectedRows, setSelectedRows] = useState([]);
@@ -35,6 +36,7 @@ function Filters() {
   const [loading, setLoading] = useState(false);
   const [loading2, setLoading2] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [currentPages, setCurrentPages] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
   const [storedRows, setStoredRows] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
@@ -56,6 +58,9 @@ const [modalData, setModalData] = useState('');
 const [clipboardMessage, setClipboardMessage] = useState(false);
 const [search, setSearch] = useState('');
 const [loadingRawdata, setLoadingRawdata] = useState(false);
+const [multiSelectColumns, setMultiSelectColumns] = useState([]);
+const [excludedColumn, setExcludedColumn] = useState([]);
+
   Histogram(Highcharts);
   function formatDateToUS(dateObject) {
     return dateObject.toLocaleString('en-US', {
@@ -104,103 +109,278 @@ const [loadingRawdata, setLoadingRawdata] = useState(false);
   };
   const handleEyeClick = async(row) => {
 
+  // console.log(row)
     if(row["auction.auctionid"]===undefined||row["auction.auctionid"]===undefined){
       alert("Please select column auctionid and rerun it to view raw request");
       return;
     }
-    if (!xAxisMin || !xAxisMax) {
-      alert("Please provide start and end date.");
-      setLoading(false);
-      return;
-    }
-    if (xAxisMin >= xAxisMax) {
-    alert("Start date must be earlier than end date.");
-    setLoading(false);
-    return;
-  }
+ // console.log("passed")
   setModalData("fetching...")
   setModalOpen(true);
   setLoadingRawdata(true);
-      const auctionid = row["auction.auctionid"]||row["auction.auctionid"]
-      const fetchPayload = {
+  const auctionid = row["auction.auctionid"];// console.log(auctionid)
+  const created = row["auction.created"];console.log(created)
+  const recordtype = row["auction.record_type"];console.log(recordtype)
+  
+  const fetchPayload = {
         auctionid: auctionid,
-        minTime:xAxisMin,
-        maxTime:xAxisMax,
+        created:created,
+        recordtype:recordtype,
       };
-      const response = await axios.post('/api/getRawdata',fetchPayload);
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.post('/api/getRawdata',fetchPayload,{
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json' // Optional, depending on the backend requirements
+        }});
       const data = response.data;
+     // console.log(data)
+     // console.log(data["rawrequest"])
+     // console.log(data)
       setLoadingRawdata(false);
     setModalData(data);
    
   };
+  const handleEyeClickAlldata = async(row) => {
+
+    if(row["auction.auctionid"]===undefined||row["auction.auctionid"]===undefined){
+      alert("Please select column auctionid and rerun it to view raw request");
+      return;
+    }
+ // console.log("passed")
+  setModalData("fetching...")
+  setModalOpen(true);
+  setLoadingRawdata(true);
+  const auctionid = row["auction.auctionid"];// console.log(auctionid)
+  const created = row["auction.created"];console.log(created)
+  const recordtype = row["auction.record_type"];console.log(recordtype)
+  
+  const fetchPayload = {
+        columns:columns,
+        auctionid: auctionid,
+        created:created,
+        recordtype:recordtype,
+      };
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.post('/api/getAllData',fetchPayload,{
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json' // Optional, depending on the backend requirements
+        }});
+      const data = response.data;
+     setLoadingRawdata(false);
+    setModalData(data);
+   
+  };
   const renderCellColumn = (params) => (
-    <IconButton onClick={() => handleEyeClick(params.row)}>
-    <VisibilityIcon />
-  </IconButton>
-  )
-  const renderCell = (params) => (
     <>
-    
-  <Tooltip
-      title={
-        <Paper
-          style={{
-            padding: '10px',
-            minwidth: '300px',
-            minHeight: '100px',
-            overflow: 'auto',
-            boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',
-            position: 'relative'
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+    {/* <IconButton onClick={() => handleEyeClick(params.row)}>
+      <Tooltip title="View Raw Data">
+    <VisibilityIcon style={{color:'blue'}}/></Tooltip>
+  </IconButton> */}
+  <IconButton onClick={() => handleEyeClickAlldata(params.row)}>
+  <Tooltip title="View All Data">
+<VisibilityIcon style={{color:'rgb(44, 175, 254)'}}/></Tooltip>
+</IconButton>
+</div>
+</>
+  )
+  const renderCell = (params) => {
+    if (params.field === 'auction.auctionid') {
+      return (
+        <Tooltip title="Double-click to view raw data" arrow
+        interactive
+          PopperProps={{
+            modifiers: [
+              {
+                name: 'flip',
+                options: {
+                  fallbackPlacements: ['right'],
+                },
+              },
+              {
+                name: 'offset',
+                options: {
+                  offset: [10, -10],
+                },
+              },
+              {
+                name: 'preventOverflow',
+                options: {
+                  padding: 8,
+                },
+              },
+            ],
+            style: {
+              zIndex: 1300
+            },
           }}
-        >
-          <div style={{ marginBottom: '10px' }}>
-            <PrettyPrintTooltip value={params.value} />
-          </div>
-          <CopyToClipboard text={params.value} onCopy={() => handleCopy(params.value)}>
-               <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '10px' }}>
-              <ContentCopyIcon />
-            </IconButton>
-          </CopyToClipboard>
-          <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '40px' }} onClick={() => handleOpenModal(params.value)}>
-            <VisibilityIcon />
-          </IconButton>
-        </Paper>
-      }
-      arrow
+          placement="left-start">
+        <span onDoubleClick={() => handleEyeClick(params.row)}>
+          {Array.isArray(params.value) ? params.value.join(', ') : params.value}
+        </span>
+      </Tooltip>
+      //   <span onDoubleClick={() => handleEyeClick(params.row)}>
+      //   {Array.isArray(params.value) ? params.value.join(', ') : params.value}
+      // </span>
+        // <Tooltip
+        //   title={
+        //     <Paper
+        //       style={{
+        //         padding: '10px',
+        //         minWidth: '30px',
+        //         minHeight: '10px',
+        //         overflow: 'auto',
+        //         boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',
+        //         position: 'relative'
+        //       }}
+        //     >
+        //         <div style={{ marginBottom: '10px' }}>
+        //     {/* <PrettyPrintTooltip value={params.value} /> */}
+        //   {/* </div> */}
+        //       <Button  variant="contained"
+        //                           color="error"
+        //                           size="small" onClick={() => handleEyeClick(params.row)} >
+        //                             View Raw Data fot {params.value}
+        //                             </Button>
+        //                             </div>
+        //     </Paper>
+        //   }
+        //   arrow
+        //   interactive
+        //   PopperProps={{
+        //     modifiers: [
+        //       {
+        //         name: 'flip',
+        //         options: {
+        //           fallbackPlacements: ['right'],
+        //         },
+        //       },
+        //       {
+        //         name: 'offset',
+        //         options: {
+        //           offset: [10, -10],
+        //         },
+        //       },
+        //       {
+        //         name: 'preventOverflow',
+        //         options: {
+        //           padding: 8,
+        //         },
+        //       },
+        //     ],
+        //     style: {
+        //       zIndex: 1300,
+        //     },
+        //   }}
+        //   placement="left-start"
+        // >
+        // 
+        //   <span>
+        //     {Array.isArray(params.value) ? params.value.join(', ') : params.value}
+        //   </span>
+        // </Tooltip>
+      );
+    }
+    return(
+      <Tooltip title="Double-click to view raw data" arrow
       interactive
-      PopperProps={{
-        modifiers: [
-          {
-            name: 'flip',
-            options: {
-              fallbackPlacements: ['right'],
+          PopperProps={{
+            modifiers: [
+              {
+                name: 'flip',
+                options: {
+                  fallbackPlacements: ['right'],
+                },
+              },
+              {
+                name: 'offset',
+                options: {
+                  offset: [10, -10],
+                },
+              },
+              {
+                name: 'preventOverflow',
+                options: {
+                  padding: 8,
+                },
+              },
+            ],
+            style: {
+              zIndex: 1300
             },
-          },
-          {
-            name: 'offset',
-            options: {
-              offset: [10, -10],
-            },
-          },
-          {
-            name: 'preventOverflow',
-            options: {
-              padding: 8,
-            },
-          },
-        ],
-        style: {
-          zIndex: 1300,
-        },
-      }}
-      placement="left-start"
-    >
-      <span>
+          }}
+          placement="left-start">
+      <span onDoubleClick={() => handleOpenModal(params.value) }>
         {Array.isArray(params.value) ? params.value.join(', ') : params.value}
       </span>
     </Tooltip>
-    </>
-  );
+    
+  // <Tooltip
+  //     title={
+  //       <Paper
+  //         style={{
+  //           padding: '10px',
+  //           minwidth: '300px',
+  //           minHeight: '100px',
+  //           overflow: 'auto',
+  //           boxShadow: '0px 4px 6px rgba(0, 0, 0, 0.1)',
+  //           position: 'relative'
+  //         }}
+  //       >
+  //         <div style={{ marginBottom: '10px' }}>
+  //           <PrettyPrintTooltip value={params.value} />
+  //         </div>
+  //         <CopyToClipboard text={params.value} onCopy={() => handleCopy(params.value)}>
+  //              <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '10px' }}>
+  //             <ContentCopyIcon />
+  //           </IconButton>
+  //         </CopyToClipboard>
+  //         <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '40px' }} onClick={() => handleOpenModal(params.value)}>
+  //           <VisibilityIcon />
+  //         </IconButton>
+  //       </Paper>
+  //     }
+  //     arrow
+  //     interactive
+  //     PopperProps={{
+  //       modifiers: [
+  //         {
+  //           name: 'flip',
+  //           options: {
+  //             fallbackPlacements: ['right'],
+  //           },
+  //         },
+  //         {
+  //           name: 'offset',
+  //           options: {
+  //             offset: [10, -10],
+  //           },
+  //         },
+  //         {
+  //           name: 'preventOverflow',
+  //           options: {
+  //             padding: 8,
+  //           },
+  //         },
+  //       ],
+  //       style: {
+  //         zIndex: 1300,
+  //       },
+  //     }}
+  //     placement="left-start"
+  //   >
+  //     <span>
+  //       {Array.isArray(params.value) ? params.value.join(', ') : params.value}
+  //     </span>
+  //   </Tooltip>
+    
+  )};
   
 
   const customizedColumns = columns.map((col) => ({
@@ -235,8 +415,26 @@ const [loadingRawdata, setLoadingRawdata] = useState(false);
     setLoading2(true);
     
     try {
-      const response = await axios.get('/api/columns');
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.get('/api/columns',{
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json' // Optional, depending on the backend requirements
+        }});
       setColumns(response.data);
+     // console.log(response.data)
+      const excludedColumns = new Set([
+        'auction.created',
+        'auction.auctionid',
+        'auction.record_type',
+      ]);
+      
+      const filteredColumns = response.data.filter(column => !excludedColumns.has(column.column_name));
+      const excludedColumn = response.data.filter(column => excludedColumns.has(column.column_name));
+      setExcludedColumn(excludedColumn)
+      setMultiSelectColumns(filteredColumns);
     } catch (error) {
       console.error('Error fetching columns:', error);
       setLoading(false);
@@ -250,8 +448,8 @@ const [loadingRawdata, setLoadingRawdata] = useState(false);
     }
   };
 
-  const fetchFilters = async ( ) => {
-
+  const fetchFilters = async () => {
+console.log(xAxisMin+" "+xAxisMax)
     setLoading(true);
     setRunCountResult('Fetching...');
     setFilterSelectedColumn('');
@@ -265,12 +463,7 @@ if (xAxisMin >= xAxisMax) {
     alert("Start date must be earlier than end date.");
     setLoading(false);
     return;
-  }
-  if( selectedValues.length ===0){
-    alert("Select atleast one row to display");
-    setLoading(false);
-    return;
-  }
+  }  
     setLoading(true);
     setDisableButton(true);
     try {
@@ -287,14 +480,33 @@ if (xAxisMin >= xAxisMax) {
         maxTime:xAxisMax,
         itemsPerPage
       };
-      const response = await axios.post('/api/filters',fetchPayload);
+      setLoading(true);
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.post('/api/filters',fetchPayload,{
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json' // Optional, depending on the backend requirements
+        }});
       const data = response.data;
+      // console.log(!data +" "+ !data.x_values +" "+  !data.a_values +" "+  data.x_values===undefined +" "+ data.x_values.size===undefined+" "+  data.z_values===undefined +" "+ data.a_values.size===undefined)
+      // if (!data || !data.x_values || !data.a_values || data.x_values===undefined ||data.x_values.size===undefined|| data.z_values===undefined ||data.a_values.size===undefined) {
+      //   alert('No Record Found for given criteria and timestamp.');
+      //   setLoading(false);
+      //   setDisableButton(false);
+      //   return;
+      // }
+  
       setXvalues(data.x_values);
       setAvalues(data.a_values);
+      const sum= data.a_values.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
+      setRunCountResult(`${formatNumber(sum)} hits`)
       setAnames(data.a_names);
+      setLoading(false);
      fetchData(xAxisMin, xAxisMax);
       
-      fetchRunCount(conditions, xAxisMin, xAxisMax);
+      //fetchRunCount(conditions, xAxisMin, xAxisMax);
     } catch (error) {
       console.error('Error fetching filters:', error);
     } finally {
@@ -302,7 +514,7 @@ if (xAxisMin >= xAxisMax) {
     }
   };
   const UniqueValueColumn = [
-    { field: 'value', headerName: 'Unique Values', width: 125 },
+    { field: 'value', headerName: 'Values', width: 125 },
     { field: 'count', headerName: 'Count', width: 80 },
     { field: 'percentage', headerName: '%', width: 80 },
   ];
@@ -331,10 +543,17 @@ if (xAxisMin >= xAxisMax) {
         maxTime: xAxisMax,
         itemsPerPage
       };
-      const response = await axios.post('/api/fetch_data', fetchPayload);
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.post('/api/fetch_data', fetchPayload,{
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json' // Optional, depending on the backend requirements
+        }});
       const formattedData = response.data.datas;
       setStoredRows(formattedData);
-      console.log(formattedData.length)
+     // console.log(formattedData.length)
       setSelectedcolumns(response.data.columns);
       const startIdx = (currentPage - 1) * itemsPerPage;
       const endIdx = currentPage * itemsPerPage;
@@ -372,7 +591,14 @@ if (xAxisMin >= xAxisMax) {
         minTime: xAxisMin,
         maxTime: xAxisMax
       };
-      const response = await axios.post('/api/run_count', payload);
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.post('/api/run_count', payload,{
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json' // Optional, depending on the backend requirements
+        }});
       setRunCountResult(`${formatNumber(response.data[0]["counts"])} hits`);
       setOpen(true);
     } catch (error) {
@@ -381,13 +607,17 @@ if (xAxisMin >= xAxisMax) {
   };
 
   const handlePageChange = (page) => setCurrentPage(page);
-
+ 
+  const handlePageChanges = (params) => {
+   // console.log("pageSize"+params.pageSize)
+    setCurrentPages(params.pageSize);
+  };
   const handleFilterTableChange = (e) => {
     setFilterSelectedColumn(e.target.value);
     const selectedColumnValues = storedRows.map((row) => row[e.target.value],
     renderCell);
   
-    const processValue = (value) => {
+    const processValue = (value) => {console.log(typeof value)
       if (typeof value === 'string') {
         // Remove curly braces, quotes, and square brackets
         value = value.replace(/[{}"\[\]]/g, '');
@@ -396,8 +626,9 @@ if (xAxisMin >= xAxisMax) {
         if (value.includes(',')) {
           return value.split(',').map(val => val.trim()).filter(val => val !== '');
         }
+        return value.trim() !== '' ? value : null;
       }
-      return value.trim() !== '' ? value : null;
+      return value !== '' ? value : null;
     };
     const valueCountMap = new Map();
 
@@ -416,21 +647,23 @@ if (xAxisMin >= xAxisMax) {
       });
     });
     
-    const totalCount = Array.from(valueCountMap.values()).reduce((acc, count) => acc + count, 0);
-    
+   // console.log(valueCountMap)
     const uniqueValuesWithCounts = Array.from(valueCountMap.entries())
       .map(([value, count]) => ({
         value,
         count,
-        percentage: Math.ceil((count / totalCount) * 100) // Calculate percentage and fix to 2 decimal places
+        percentage: Math.ceil((count / storedRows.length) * 100) // Calculate percentage and fix to 2 decimal places
       }))
-      .sort((a, b) => a.value.localeCompare(b.value));
     setSuggestions(uniqueValuesWithCounts);
     
 
   };
 
   const valueToNameMap = {
+    10: 'last 10 mins',
+    20: 'last 20 mins',
+    30: 'last 30 mins',
+
     1: 'last 1h',
     3: 'last 3h',
     6: 'last 6h',
@@ -438,6 +671,7 @@ if (xAxisMin >= xAxisMax) {
     24: 'last 1d',
   };
   const handleChartChange = (event) => {
+    setLoading(true);
     const selectedValue = event.target.value;
     setChartselect(selectedValue);
   
@@ -464,6 +698,16 @@ if (xAxisMin >= xAxisMax) {
       case 24:
         startTime.setUTCDate(startTime.getUTCDate() - 1);
         break;
+      case 10:
+          startTime.setUTCMinutes(startTime.getUTCMinutes() - 10);
+          break;
+      case 20:
+            startTime.setUTCMinutes(startTime.getUTCMinutes() - 20);
+            break;
+      case 30:
+            startTime.setUTCMinutes(startTime.getUTCMinutes() - 30);
+            break;
+             
       default:
         break;
     }
@@ -477,19 +721,64 @@ if (xAxisMin >= xAxisMax) {
       const minutes = dateObj.getUTCMinutes().toString().padStart(2, '0');
       return `${year}-${month}-${day}T${hours}:${minutes}`;
     };
-  
+  setLoading(true);
+  setXAxisMin(startTime);
+    setXAxisMax(endTime);
+    
     const startTimeFormatted = formatDateTime(formatDate(startTime));
     const endTimeFormatted = formatDateTime(formatDate(endTime));
     setXAxisMin(startTimeFormatted);
     setXAxisMax(endTimeFormatted);
-    setXAxisMin(startTimeFormatted);
-    setXAxisMax(endTimeFormatted);
+   // console.log(startTimeFormatted);
+   // console.log(endTimeFormatted);
     setTimeout(() => {
-      fetchFilters();
-    }, 1);
+      setXAxisMin(startTimeFormatted);
+      setXAxisMax(endTimeFormatted);
+      runfetch(startTimeFormatted,endTimeFormatted)
+    }, 0);
+
   };
   
-  
+  const runfetch = async(startTimeFormatted,endTimeFormatted)=>{
+    setXAxisMin(startTimeFormatted);
+    setXAxisMax(endTimeFormatted);
+    try {
+      const conditionString = conditions.map(condition => {
+
+        return `(${condition.field} ${condition.operator} ${condition.value})`;
+
+      }).join(' AND ');
+      const fetchPayload = {
+        conditions: conditionString,
+        columns: selectedValues,
+        page: currentPage,
+        minTime:startTimeFormatted,
+        maxTime:endTimeFormatted,
+        itemsPerPage
+      };
+      setLoading(true);
+      const storedToken = JSON.parse(localStorage.getItem('okta-token-storage'));
+      const accessToken = storedToken?.accessToken?.accessToken;
+      
+      const response = await axios.post('/api/filters',fetchPayload,{
+        headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json' // Optional, depending on the backend requirements
+        }});
+      const data = response.data;
+      setXvalues(data.x_values);
+      setAvalues(data.a_values);
+      const sum= data.a_values.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
+      setRunCountResult(`${formatNumber(sum)} hits`)
+      setAnames(data.a_names);
+      setLoading(false);
+     fetchData(startTimeFormatted, endTimeFormatted);
+    } catch (error) {
+      console.error('Error fetching filters:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
   const handleValueChange = (e) => {
     const typedText = e.target.value.trim().toLowerCase();
     setValue(e.target.value);
@@ -500,26 +789,7 @@ if (xAxisMin >= xAxisMax) {
     const column = columns.find(col => col.column_name === columnName);
     return column ? column.data_type : null;
   };
-  // const addCondition = () => {
-  //   if (filterColumn === '' || !validateInput()) {
-  //     alert('Both Condition and value are required');
-  //     return;
-  //   }
-  //   const isInOperator = value.includes(',');
-
-  // // Create new condition based on whether to use IN or LIKE operator
-  // const newCondition = isInOperator 
-  //   ? { field: filterColumn, operator: 'in', value: value.split(',').map(v => v.trim()) } 
-  //   : { field: filterColumn, operator: 'like', value: `%${value}%` };
-
-  //   //const newCondition = { field: filterColumn, operator: 'like', value: `%${value}%` };
-  //   const updatedCondition = [...conditions, newCondition];
-  //   setConditions(updatedCondition);
-  //   setFilterColumn('');
-  //   setValue('');
-  //   fetchRunCount(updatedCondition,xAxisMin,xAxisMax)
-  //   setSuggestions([]);
-  // };
+  
 
 
   const addCondition = () => {
@@ -733,10 +1003,20 @@ if (xAxisMin >= xAxisMax) {
   const escapedColumns = [
     {
       field: 'viewData',
-      headerName: 'View Raw Data',
+      headerName: 'OverAll Data',
       width: 100,
+      sortable: true,
       renderCell: renderCellColumn, // Render the eye icon
     },
+    ...excludedColumn.map((column) => ({
+      field: column.column_name,
+      headerName: column.column_name,
+      sortable: true,
+      width: 250,
+      dataType: column.data_type,
+      renderCell,
+      
+      })),
     ...selectedcolumns.map((column) => ({
     field: column.column_name,
     headerName: column.column_name,
@@ -824,11 +1104,16 @@ if (xAxisMin >= xAxisMax) {
             const maxIndex = Math.ceil(e.min);
             const maxXValue = convertToCustomFormat(formattedDates[minIndex]);
             const minXValue = convertToCustomFormat(formattedDates[maxIndex]);
+            if(minXValue!==undefined && maxXValue!==undefined){
             setXAxisMin(minXValue);
             setXAxisMax(maxXValue);
+            }
             if (!isInitialMount.current) {
+              const sum= avalues.reduce((accumulator, currentValue) => accumulator + currentValue, 0);
+              setRunCountResult(`${formatNumber(sum)} hits`)
               fetchData(minXValue, maxXValue);
-              fetchRunCount(conditions, minXValue, maxXValue);
+             
+             // fetchRunCount(conditions, minXValue, maxXValue);
             }
           }
         }
@@ -838,24 +1123,7 @@ if (xAxisMin >= xAxisMax) {
           text: 'Request Count',
         },
       },
-      rangeSelector: {
-        buttons: [{
-            type: 'hour',
-            count: 1,
-            text: '1h'
-        }, {
-            type: 'day',
-            count: 1,
-            text: '1D'
-        }, {
-            type: 'all',
-            count: 1,
-            text: 'All'
-        }],
-        selected: 1,
-        inputEnabled: false,
-        enabled:true
-    },
+      
       credits: {
         enabled: false
       },
@@ -867,7 +1135,15 @@ if (xAxisMin >= xAxisMax) {
         column: {
           pointPadding: 0.2,
           borderWidth: 0,
-          pointPlacement: 'left' // Align bars correctly with x-axis values
+          pointPlacement: 'left',
+          events: {
+            click: function (event) {
+              const pointIndex = event.point.index; // Get x-axis index of the clicked bar
+             // console.log('Clicked bar x-axis index:', pointIndex);
+              // You can also use event.point.category if you want the category value
+              // const category = event.point.category;
+            }
+          } // Align bars correctly with x-axis values
         },
         histogram: {
           binWidth: 0.1, // Adjust the bin width as needed
@@ -932,11 +1208,25 @@ if (xAxisMin >= xAxisMax) {
     }
     
     const prettyPrintValue = Array.isArray(parsedValue)
-      ? `[${parsedValue.map((item, index) => `\n  ${JSON.stringify(item, null, 2)}`).join(',')}\n]`
-      : JSON.stringify(parsedValue, null, 2);
-  
+      ? `[${parsedValue.map((item, index) => `\n  ${JSON.stringify(item, null, 2)}`).join(',')}\n]` .replaceAll('\{\\\"', '{\n\t"')
+      .replaceAll('\\\\n"', '\n\t')
+      .replaceAll('\\\"','"')
+      .replaceAll('\\\\\"','"')
+      .replaceAll('\}','\n}')
+      .replaceAll('\[\"','[\n"')
+      .replaceAll('\]',']')
+      .replaceAll(',\"',',\n\t"')
+      : JSON.stringify(parsedValue, null, 2) .replaceAll('\{\\\"', '{\n\t"')
+      .replaceAll('\\\\n"', '\n\t')
+      .replaceAll('\\\"','"')
+      .replaceAll('\\\\\"','"')
+      .replaceAll('\}','\n}')
+      .replaceAll('\[\"','[\n"')
+      .replaceAll('\]',']')
+      .replaceAll(',\"',',\n\t"');
+ // console.log(prettyPrintValue)
     navigator.clipboard.writeText(prettyPrintValue).then(() => {
-      console.log('Copied to clipboard successfully!');
+     // console.log('Copied to clipboard successfully!');
       // Show a message or perform any other action
     }).catch((err) => {
       console.error('Could not copy text: ', err);
@@ -1102,7 +1392,7 @@ if (xAxisMin >= xAxisMax) {
             </WhiteIconButton></Typography>
             {showFilterSelected && (
               <>
-                <div className="row" style={{ marginTop: '20px', minHeight: '200px', maxHeight: '200px', overflowY: 'auto' }}>
+                <div className="row" style={{ marginTop: '20px', minHeight: '100px', maxHeight: '200px', overflowY: 'auto' }}>
 
                   <div id="scrollable-table" className="col-md-12" style={{ width: '100%' }}>
 
@@ -1141,7 +1431,7 @@ if (xAxisMin >= xAxisMax) {
             <div className="row" style={{ marginTop: '15px', minHeight: '100px', maxHeight: '200px', overflowX: 'auto' }}>
             
               <FormControl fullWidth style={{ marginTop: '20px' }} required>
-              <MultiSelectDropdown columns={columns} onChange={handleOnChangeDropDown} />
+              <MultiSelectDropdown columns={multiSelectColumns} onChange={handleOnChangeDropDown} />
             </FormControl>
             
             
@@ -1155,22 +1445,38 @@ if (xAxisMin >= xAxisMax) {
               <div >
               <FormControl fullWidth style={{ marginTop: '20px' }} required>
 
-                      <InputLabel style={{ marginTop: '-5px' }} htmlFor="filterselectedColumn">Select a Column to check distinct value:</InputLabel>
+                      <InputLabel style={{ marginTop: '-5px' }} htmlFor="filterselectedColumn">Select a Column:</InputLabel>
                       <Select
                         id="filterselectedColumn"
                         value={filterselectedColumn}
                         onChange={handleFilterTableChange}
 
                         required
-                      >{selectedcolumns.map((column) => (
+                      >{excludedColumn.map((column) => (
+                        <MenuItem key={column.id} value={column.column_name} style={{ whiteSpace: 'normal', wordBreak: 'break-word', width: '300px' }}>
+                          {column.column_name}
+                        </MenuItem>
+                      ))}
+                        {selectedcolumns.map((column) => (
                         <MenuItem key={column.id} value={column.column_name} style={{ whiteSpace: 'normal', wordBreak: 'break-word', width: '300px' }}>
                           {column.column_name}
                         </MenuItem>
                       ))}
                       </Select>
                 </FormControl>
-                </div><div className="row" style={{ marginTop: '10px', minHeight: '400px', maxHeight: '500px'}}>
-                <DataGrid rows={UniqueValueRows} columns={UniqueValueColumn} pagination={false} pageSizeOptions={false}/>
+                </div><div className="row" style={{ marginTop: '10px', minHeight: '10px', maxHeight: '200px'}}>
+                  
+                <DataGrid rows={UniqueValueRows} 
+                columns={UniqueValueColumn}
+                initialState={{
+                  pagination: {
+                    paginationModel: { pageSize: 5, page: 0 },
+                  },
+                }}
+                pageSize={10} 
+                rowsPerPageOptions={[10, 15, 20]}
+                onPageSizeChange={handlePageChanges}
+        />
                
               </div>
               
@@ -1180,39 +1486,53 @@ if (xAxisMin >= xAxisMax) {
         </Grid>
         <Grid item xs={10}>
         <Modal
-  open={modalOpen}
-  onClose={handleCloseModal}
-  aria-labelledby="modal-title"
-  aria-describedby="modal-description"
->
-  <Box
-    sx={{
-      position: 'absolute',
-      top: '50%',
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      width: '80%',
-      bgcolor: 'background.paper',
-      boxShadow: 24,
-      p: 4,
-      overflow: 'auto',
-      maxHeight: '80vh'
-    }}
-  >{loadingRawdata ? <CircularProgress size={50} /> : null}
-    <Typography id="modal-title" variant="h6" component="h2">
-      Data
-    </Typography>
-    
-    <Typography id="modal-description" sx={{ mt: 2 }}>
-      <PrettyPrintTooltip value={modalData} />
-    </Typography>
-    <CopyToClipboard text={modalData} onCopy={() => handleCopy(modalData)}>
-      <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '10px' }}>
-        <ContentCopyIcon />
-      </IconButton>
-    </CopyToClipboard>
-  </Box>
-</Modal>
+      open={modalOpen}
+      onClose={(event, reason) => {
+        if (reason !== 'backdropClick') {
+          handleCloseModal();
+        }
+      }}
+      aria-labelledby="modal-title"
+      aria-describedby="modal-description"
+      BackdropProps={{ onClick: (event) => event.stopPropagation() }}
+    >
+      <Box
+        sx={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '80%',
+          bgcolor: 'background.paper',
+          boxShadow: 24,
+          p: 4,
+          overflow: 'auto',
+          maxHeight: '80vh'
+        }}
+      >
+        {loadingRawdata ? <CircularProgress size={50} /> : null}
+        <Typography id="modal-title" variant="h6" component="h2">
+        Data Preview
+        </Typography>
+        
+        <Typography id="modal-description" sx={{ mt: 2 }}>
+          <PrettyPrintTooltip value={modalData} />
+        </Typography>
+        <CopyToClipboard text={modalData} onCopy={() => handleCopy(modalData)}>
+          <IconButton size="small" style={{ position: 'absolute', top: '10px', right: '100px', backgroundColor:'#f0f5f5' ,color: 'black', border:'solid red 1px box',borderRadius: '4px',padding: '2px 8px'}}>
+            <ContentCopyIcon />Copy
+          </IconButton>
+        </CopyToClipboard>
+        <IconButton
+          size="small"
+          style={{ position: 'absolute', top: '10px', right: '10px', backgroundColor:'#ff6699' ,color: 'black',border:'solid black 1px box',borderRadius: '4px',padding: '2px 8px'}}
+          onClick={handleCloseModal}
+        >
+         <CloseIcon />Close
+        </IconButton>
+      </Box>
+    </Modal>
+
 {clipboardMessage && (
   <div style={{
     position: 'fixed',
@@ -1244,6 +1564,9 @@ if (xAxisMin >= xAxisMax) {
           return valueToNameMap[selected];
         }}
       >
+             <MenuItem  value={10}>last 10m</MenuItem>
+             <MenuItem  value={20}>last 20m</MenuItem>
+             <MenuItem  value={30}>last 30m</MenuItem>
              <MenuItem  value={1}>last 1h</MenuItem>
              <MenuItem  value={3}>last 3h</MenuItem>
              <MenuItem  value={6}>last 6h</MenuItem>
@@ -1285,8 +1608,9 @@ if (xAxisMin >= xAxisMax) {
           </div>
 
         </Grid>
+        <Footer />
       </Grid>
-      <Footer />
+      
     </div>
   );
 }
